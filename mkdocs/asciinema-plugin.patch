@@ -1,0 +1,22 @@
+diff --git a/src/mkdocs_asciinema_player/plugin.py b/src/mkdocs_asciinema_player/plugin.py
+index 45eeea8..f5fde70 100644
+--- a/src/mkdocs_asciinema_player/plugin.py
++++ b/src/mkdocs_asciinema_player/plugin.py
+@@ -10,6 +10,7 @@ import json
+ import logging
+ import re
+ import shutil
++import os
+ from json import JSONDecodeError
+ from pathlib import Path
+ from re import Match
+@@ -299,7 +300,8 @@ class AsciinemaPlayerPlugin(BasePlugin[AsciinemaPlayerConfig]):
+         files.append(terminal_player_css_file_obj)
+         files.append(asciinema_css_file_obj)
+         files.append(asciinema_js_file_obj)
+-        shutil.copytree(assets_src_dir + "/icons", icons_dest_dir)
++        if not os.path.exists(icons_dest_dir):
++            shutil.copytree(assets_src_dir + "/icons", icons_dest_dir)
+ 
+         return files
+ 
