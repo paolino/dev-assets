@@ -1,0 +1,21 @@
+name: "Setup Nix and Cachix (paolino)"
+description: "Install Nix + IOHK cache + authenticate to paolino Cachix"
+inputs:
+  cachix-auth-token:
+    description: "Cachix auth token for the paolino cache"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - uses: cachix/install-nix-action@v31
+      with:
+        extra_nix_config: |
+          trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+          substituters = https://cache.iog.io https://cache.nixos.org/
+          accept-flake-config = true
+
+    - uses: cachix/cachix-action@v15
+      with:
+        name: paolino
+        authToken: ${{ inputs.cachix-auth-token }}   # now it works
