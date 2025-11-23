@@ -25,12 +25,15 @@
         { system, pkgs, ... }:
         let
           asciinema-plugin = import ./asciinema-plugin.nix { inherit pkgs; };
+          markdown-callouts-plugin = import ./markdown-callouts-plugin.nix { inherit pkgs; };
         in
         {
           packages.mkdocs-asciinema-player = asciinema-plugin;
+          packages.mkdocs-markdown-callouts = markdown-callouts-plugin;
           devShells.default = pkgs.mkShell {
             packages = [
               asciinema-plugin
+              markdown-callouts-plugin
               pkgs.mkdocs
             ];
 
