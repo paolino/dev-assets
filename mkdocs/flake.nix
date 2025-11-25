@@ -26,15 +26,18 @@
         let
           asciinema-plugin = import ./asciinema-plugin.nix { inherit pkgs; };
           markdown-callouts-plugin = import ./markdown-callouts-plugin.nix { inherit pkgs; };
+          mkdocs-packages = pkgs.python3.withPackages (ps: [ ps.mkdocs-material ]);
         in
         {
           packages.mkdocs-asciinema-player = asciinema-plugin;
           packages.mkdocs-markdown-callouts = markdown-callouts-plugin;
+          packages.mkdocs-packages = mkdocs-packages;
           devShells.default = pkgs.mkShell {
             packages = [
               asciinema-plugin
               markdown-callouts-plugin
               pkgs.mkdocs
+              mkdocs-packages
             ];
 
             shellHook = ''

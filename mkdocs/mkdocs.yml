@@ -1,7 +1,17 @@
 site_name: My dev assets
 
+
 theme:
-  name: readthedocs
+  name: material
+  palette:
+    scheme: default   # or slate for dark mode
+  features:
+    - navigation.expand      # ← THIS IS THE KEY
+    - navigation.sections    # treats top-level sections as expandable (optional but nice)
+    - navigation.indexes     # allows index pages in sections
+    - toc.integrate          # merges table of contents into sidebar (optional, looks more like RTD)
+  icon:
+    logo: material/library
 
 plugins:
   - search
