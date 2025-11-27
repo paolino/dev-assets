@@ -25,19 +25,23 @@
         { system, pkgs, ... }:
         let
           plugins = {
+            markdown-graphviz = pkgs.callPackage ./nix/markdown-graphviz.nix { };
             asciinema-plugin = pkgs.callPackage ./nix/asciinema-plugin.nix { };
             markdown-callouts = pkgs.callPackage ./nix/markdown-callouts.nix { };
             from-nixpkgs = pkgs.python3.withPackages (ps: [
               ps.mkdocs-material
+              ps.graphviz
             ]);
           };
         in
-        rec {
+        {
           packages = plugins;
           devShells.default = pkgs.mkShell {
             packages = [
+              pkgs.graphviz
               pkgs.mkdocs
-            ] ++ (builtins.attrValues plugins);
+            ]
+            ++ (builtins.attrValues plugins);
 
             shellHook = ''
               echo "MkDocs environment ready!"

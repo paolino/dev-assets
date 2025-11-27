@@ -19,3 +19,7 @@ plugins:
 
 markdown_extensions:
   - callouts
+  - mkdocs_graphviz
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/gh/rod2ik/cdn@main/mkdocs/javascripts/mkdocs-graphviz.js
