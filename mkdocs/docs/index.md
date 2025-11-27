@@ -55,5 +55,20 @@ digraph G {
 ```asciinema-player
 {
     "file": "assets/asciinema/bootstrap.cast"
+    , "cols": 130
+    , "rows": 20
+    , "mkap_theme": "none"
 }
+```
+
+```mermaid
+graph TD;
+    A[Start] --> B{Is it working?};
+    B -- Yes --> C[Great!];
+    B -- No --> D[Check the code];
+    D --> E{Found the issue?};
+    E -- Yes --> F[Fix it];
+    E -- No --> G[Ask for help];
+    F --> C;
+    G --> C;
 ```

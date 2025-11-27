@@ -16,6 +16,7 @@ theme:
 plugins:
   - search
   - asciinema-player
+  - mermaid2
 
 markdown_extensions:
   - callouts

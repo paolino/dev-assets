@@ -30,6 +30,7 @@
             markdown-callouts = pkgs.callPackage ./nix/markdown-callouts.nix { };
             from-nixpkgs = pkgs.python3.withPackages (ps: [
               ps.mkdocs-material
+              ps.mkdocs-mermaid2-plugin
               ps.graphviz
             ]);
           };
