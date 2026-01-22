@@ -38,6 +38,7 @@
               swagger-ui-tag-fixed
               ps.graphviz
               ps.pymdown-extensions
+              ps.mkdocs-macros-plugin
             ]);
           };
         in
