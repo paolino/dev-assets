@@ -37,6 +37,7 @@
               ps.mkdocs-mermaid2-plugin
               swagger-ui-tag-fixed
               ps.graphviz
+              ps.pymdown-extensions
             ]);
           };
         in
