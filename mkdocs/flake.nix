@@ -32,6 +32,7 @@
             markdown-graphviz = pkgs.callPackage ./nix/markdown-graphviz.nix { };
             asciinema-plugin = pkgs.callPackage ./nix/asciinema-plugin.nix { };
             markdown-callouts = pkgs.callPackage ./nix/markdown-callouts.nix { };
+            static-i18n = pkgs.callPackage ./nix/static-i18n.nix { };
             from-nixpkgs = pkgs.python3.withPackages (ps: [
               ps.mkdocs-material
               ps.mkdocs-mermaid2-plugin
