@@ -28,6 +28,14 @@
           swagger-ui-tag-fixed = pkgs.python3Packages.mkdocs-swagger-ui-tag.overridePythonAttrs (old: {
             doCheck = false; # Skips the failing pytest suite — plugin works fine without it
           });
+          # Wrapper that cleans up site/ after gh-deploy to prevent
+          # read-only files from blocking subsequent CI checkouts
+          mkdocs-deploy = pkgs.writeShellScriptBin "mkdocs-deploy" ''
+            mkdocs gh-deploy "$@"
+            rc=$?
+            rm -rf site/
+            exit $rc
+          '';
           plugins = {
             markdown-graphviz = pkgs.callPackage ./nix/markdown-graphviz.nix { };
             asciinema-plugin = pkgs.callPackage ./nix/asciinema-plugin.nix { };
@@ -49,6 +57,7 @@
             packages = [
               pkgs.graphviz
               pkgs.mkdocs
+              mkdocs-deploy
             ]
             ++ (builtins.attrValues plugins);
 
