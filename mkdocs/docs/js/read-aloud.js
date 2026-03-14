@@ -3,15 +3,33 @@ document.addEventListener("DOMContentLoaded", function () {
   if (!synth) return;
 
   var playing = null;
+  var queue = [];
+  var currentIndex = 0;
 
-  function getTextContent(section) {
-    var cloned = section.cloneNode(true);
+  function extractText(el) {
+    var cloned = el.cloneNode(true);
     cloned.querySelectorAll(
       "pre, code, .mermaid, table, .md-nav, .md-footer"
-    ).forEach(function (el) {
-      el.remove();
+    ).forEach(function (node) {
+      node.remove();
     });
     return cloned.textContent.replace(/\s+/g, " ").trim();
+  }
+
+  function collectSegments(elements) {
+    var segments = [];
+    elements.forEach(function (el) {
+      if (el.tagName === "UL" || el.tagName === "OL") {
+        el.querySelectorAll(":scope > li").forEach(function (li) {
+          var text = extractText(li);
+          if (text.length > 0) segments.push(text + ".");
+        });
+      } else {
+        var text = extractText(el);
+        if (text.length > 0) segments.push(text);
+      }
+    });
+    return segments;
   }
 
   function createButton() {
@@ -33,11 +51,29 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function stopSpeaking() {
     synth.cancel();
+    queue = [];
+    currentIndex = 0;
     if (playing) {
       playing.textContent = "\u25B6";
       playing.style.opacity = "0.5";
       playing = null;
     }
+  }
+
+  function speakNext(btn) {
+    if (currentIndex >= queue.length) {
+      btn.textContent = "\u25B6";
+      btn.style.opacity = "0.5";
+      playing = null;
+      return;
+    }
+    var utterance = new SpeechSynthesisUtterance(queue[currentIndex]);
+    utterance.rate = 1.0;
+    utterance.onend = function () {
+      currentIndex++;
+      speakNext(btn);
+    };
+    synth.speak(utterance);
   }
 
   document.querySelectorAll("h2, h3").forEach(function (heading) {
@@ -49,12 +85,8 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     if (section.length === 0) return;
 
-    var wrapper = document.createElement("div");
-    section.forEach(function (el) {
-      wrapper.appendChild(el.cloneNode(true));
-    });
-    var text = getTextContent(wrapper);
-    if (text.length < 20) return;
+    var segments = collectSegments(section);
+    if (segments.length === 0) return;
 
     var btn = createButton();
     heading.appendChild(btn);
@@ -69,17 +101,12 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       stopSpeaking();
-      var utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0;
-      utterance.onend = function () {
-        btn.textContent = "\u25B6";
-        btn.style.opacity = "0.5";
-        playing = null;
-      };
+      queue = segments;
+      currentIndex = 0;
       btn.textContent = "\u25A0";
       btn.style.opacity = "1";
       playing = btn;
-      synth.speak(utterance);
+      speakNext(btn);
     });
   });
 });
