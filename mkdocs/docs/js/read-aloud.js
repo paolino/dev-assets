@@ -9,6 +9,73 @@ document.addEventListener("DOMContentLoaded", function () {
   var pauseTimer = null;
   var speechData = null;
   var generation = 0; // incremented on stop to invalidate callbacks
+  var selectedVoice = null;
+  var voices = [];
+
+  // Voice selector — inserted once at top of article
+  function createVoiceSelector() {
+    var container = document.createElement("div");
+    container.style.cssText =
+      "position:fixed;bottom:1rem;right:1rem;z-index:1000;" +
+      "background:var(--md-default-bg-color, #1a1b26);" +
+      "border:1px solid var(--md-default-fg-color--lighter, #3b4261);" +
+      "border-radius:6px;padding:6px 10px;font-size:13px;" +
+      "color:var(--md-default-fg-color, #c0caf5);opacity:0.7;";
+    container.addEventListener("mouseenter", function () {
+      container.style.opacity = "1";
+    });
+    container.addEventListener("mouseleave", function () {
+      container.style.opacity = "0.7";
+    });
+
+    var label = document.createElement("span");
+    label.textContent = "\uD83D\uDD0A ";
+    container.appendChild(label);
+
+    var select = document.createElement("select");
+    select.style.cssText =
+      "background:var(--md-default-bg-color, #1a1b26);" +
+      "color:var(--md-default-fg-color, #c0caf5);" +
+      "border:1px solid var(--md-default-fg-color--lighter, #3b4261);" +
+      "border-radius:4px;padding:2px 4px;font-size:13px;" +
+      "max-width:250px;";
+
+    function populateVoices() {
+      voices = synth.getVoices();
+      if (voices.length === 0) return;
+      select.innerHTML = "";
+      var saved = localStorage.getItem("read-aloud-voice");
+      voices.forEach(function (voice, i) {
+        var opt = document.createElement("option");
+        opt.value = i;
+        opt.textContent = voice.name + " (" + voice.lang + ")";
+        if (saved && voice.name === saved) {
+          opt.selected = true;
+          selectedVoice = voice;
+        }
+        select.appendChild(opt);
+      });
+      if (!selectedVoice && voices.length > 0) {
+        selectedVoice = voices[0];
+      }
+    }
+
+    select.addEventListener("change", function () {
+      var idx = parseInt(select.value, 10);
+      selectedVoice = voices[idx];
+      localStorage.setItem("read-aloud-voice", selectedVoice.name);
+    });
+
+    populateVoices();
+    if (synth.onvoiceschanged !== undefined) {
+      synth.onvoiceschanged = populateVoices;
+    }
+
+    container.appendChild(select);
+    document.body.appendChild(container);
+  }
+
+  createVoiceSelector();
 
   // Try loading speech JSON for this page
   var pagePath = window.location.pathname
@@ -148,6 +215,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     var utterance = new SpeechSynthesisUtterance(seg.text);
     utterance.rate = seg.rate || 1.0;
+    if (selectedVoice) utterance.voice = selectedVoice;
     utterance.onend = function () {
       if (gen !== generation) return;
       currentIndex++;
