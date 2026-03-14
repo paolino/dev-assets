@@ -3,8 +3,10 @@ document.addEventListener("DOMContentLoaded", function () {
   if (!synth) return;
 
   var playing = null;
+  var paused = false;
   var queue = [];
   var currentIndex = 0;
+  var pauseTimer = null;
   var speechData = null;
 
   // Try loading speech JSON for this page
@@ -38,8 +40,22 @@ document.addEventListener("DOMContentLoaded", function () {
     return cloned.textContent.replace(/\s+/g, " ").trim();
   }
 
-  function collectSegments(elements) {
+  function getHeadingText(heading) {
+    var cloned = heading.cloneNode(true);
+    // Remove the button and any anchor links
+    cloned.querySelectorAll("button, a.headerlink").forEach(function (el) {
+      el.remove();
+    });
+    return cloned.textContent.replace(/\s+/g, " ").trim();
+  }
+
+  function collectSegments(heading, elements) {
     var segments = [];
+    // Read the heading first
+    var title = getHeadingText(heading);
+    if (title.length > 0) {
+      segments.push({ text: title + ".", pause: 500 });
+    }
     elements.forEach(function (el) {
       if (el.tagName === "UL" || el.tagName === "OL") {
         el.querySelectorAll(":scope > li").forEach(function (li) {
@@ -64,10 +80,11 @@ document.addEventListener("DOMContentLoaded", function () {
       .replace(/(^-|-$)/g, "");
   }
 
+  // ▶ = play, ❚❚ = pause, ■ = stop (double-click)
   function createButton() {
     var btn = document.createElement("button");
     btn.textContent = "\u25B6";
-    btn.title = "Read aloud";
+    btn.title = "Read aloud (click: play/pause)";
     btn.style.cssText =
       "background:none;border:1px solid var(--md-default-fg-color--lighter);" +
       "border-radius:4px;cursor:pointer;font-size:14px;padding:2px 8px;" +
@@ -81,22 +98,43 @@ document.addEventListener("DOMContentLoaded", function () {
     return btn;
   }
 
-  function stopSpeaking() {
+  function fullStop(btn) {
+    if (pauseTimer) {
+      clearTimeout(pauseTimer);
+      pauseTimer = null;
+    }
     synth.cancel();
     queue = [];
     currentIndex = 0;
-    if (playing) {
-      playing.textContent = "\u25B6";
-      playing.style.opacity = "0.5";
-      playing = null;
+    paused = false;
+    if (btn) {
+      btn.textContent = "\u25B6";
+      btn.style.opacity = "0.5";
     }
+    playing = null;
+  }
+
+  function pauseSpeaking(btn) {
+    synth.pause();
+    if (pauseTimer) {
+      clearTimeout(pauseTimer);
+      pauseTimer = null;
+    }
+    paused = true;
+    btn.textContent = "\u25B6";
+    btn.title = "Resume";
+  }
+
+  function resumeSpeaking(btn) {
+    paused = false;
+    btn.textContent = "\u275A\u275A";
+    btn.title = "Pause";
+    synth.resume();
   }
 
   function speakSegment(btn) {
     if (currentIndex >= queue.length) {
-      btn.textContent = "\u25B6";
-      btn.style.opacity = "0.5";
-      playing = null;
+      fullStop(btn);
       return;
     }
     var seg = queue[currentIndex];
@@ -111,7 +149,10 @@ document.addEventListener("DOMContentLoaded", function () {
       currentIndex++;
       var pause = seg.pause || 200;
       if (pause > 0) {
-        setTimeout(function () { speakSegment(btn); }, pause);
+        pauseTimer = setTimeout(function () {
+          pauseTimer = null;
+          speakSegment(btn);
+        }, pause);
       } else {
         speakSegment(btn);
       }
@@ -128,7 +169,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     if (section.length === 0) return;
 
-    var fallbackSegments = collectSegments(section);
+    var fallbackSegments = collectSegments(heading, section);
     if (fallbackSegments.length === 0) return;
 
     var sectionId = getSectionId(heading);
@@ -139,14 +180,24 @@ document.addEventListener("DOMContentLoaded", function () {
       e.preventDefault();
       e.stopPropagation();
 
-      if (playing === btn) {
-        stopSpeaking();
+      // If this button is playing and paused, resume
+      if (playing === btn && paused) {
+        resumeSpeaking(btn);
         return;
       }
 
-      stopSpeaking();
+      // If this button is playing, pause
+      if (playing === btn && !paused) {
+        pauseSpeaking(btn);
+        return;
+      }
 
-      // Prefer speech JSON if available for this section
+      // Stop any other section that's playing
+      if (playing) {
+        fullStop(playing);
+      }
+
+      // Start playing this section
       if (speechData && speechData[sectionId]) {
         queue = speechData[sectionId];
       } else {
@@ -154,7 +205,9 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       currentIndex = 0;
-      btn.textContent = "\u25A0";
+      paused = false;
+      btn.textContent = "\u275A\u275A";
+      btn.title = "Pause";
       btn.style.opacity = "1";
       playing = btn;
       speakSegment(btn);
