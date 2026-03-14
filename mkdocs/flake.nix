@@ -50,14 +50,18 @@
               ps.mkdocs-macros-plugin
             ]);
           };
+          mkdocs-speech = pkgs.writeShellScriptBin "mkdocs-speech" ''
+            exec ${pkgs.babashka}/bin/bb ${./bin/mkdocs-speech} "$@"
+          '';
         in
         {
-          packages = plugins;
+          packages = plugins // { inherit mkdocs-speech; };
           devShells.default = pkgs.mkShell {
             packages = [
               pkgs.graphviz
               pkgs.mkdocs
               mkdocs-deploy
+              mkdocs-speech
             ]
             ++ (builtins.attrValues plugins);
 

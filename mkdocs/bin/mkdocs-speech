@@ -1,0 +1,173 @@
+#!/usr/bin/env bb
+
+(ns mkdocs-speech
+  (:require [clojure.string :as str]
+            [clojure.java.io :as io]
+            [cheshire.core :as json]))
+
+(defn slug
+  "Convert heading text to mkdocs-style anchor ID."
+  [text]
+  (-> text
+      str/lower-case
+      str/trim
+      (str/replace #"[^a-z0-9\s-]" "")
+      (str/replace #"\s+" "-")
+      (str/replace #"^-|-$" "")))
+
+(defn strip-markdown
+  "Remove markdown formatting, keep readable text."
+  [text]
+  (-> text
+      (str/replace #"\*\*([^*]+)\*\*" "$1")       ; bold
+      (str/replace #"\*([^*]+)\*" "$1")            ; italic
+      (str/replace #"`([^`]+)`" "$1")              ; inline code
+      (str/replace #"\[([^\]]+)\]\([^)]+\)" "$1")  ; links
+      str/trim))
+
+(defn parse-sections
+  "Parse markdown into sections keyed by heading."
+  [content]
+  (let [lines (str/split-lines content)]
+    (loop [lines lines
+           current-heading nil
+           current-lines []
+           sections []]
+      (if (empty? lines)
+        (if current-heading
+          (conj sections [current-heading current-lines])
+          sections)
+        (let [line (first lines)
+              rest-lines (rest lines)]
+          (if-let [[_ hashes title] (re-matches #"^(#{2,3})\s+(.+)$" line)]
+            (let [new-sections (if current-heading
+                                 (conj sections [current-heading current-lines])
+                                 sections)]
+              (recur rest-lines
+                     {:level (count hashes) :title (strip-markdown title)}
+                     []
+                     new-sections))
+            (recur rest-lines
+                   current-heading
+                   (conj current-lines line)
+                   sections)))))))
+
+(defn classify-block
+  "Classify a block of lines and return speech segments."
+  [lines]
+  (loop [lines lines
+         in-fence nil
+         fence-type nil
+         segments []]
+    (if (empty? lines)
+      segments
+      (let [line (first lines)
+            rest-lines (rest lines)]
+        (cond
+          ;; Opening code fence
+          (and (not in-fence) (re-matches #"^```(\w*).*$" line))
+          (let [[_ lang] (re-matches #"^```(\w*).*$" line)]
+            (recur rest-lines true lang segments))
+
+          ;; Closing code fence
+          (and in-fence (re-matches #"^```\s*$" line))
+          (let [seg (cond
+                      (= fence-type "mermaid")
+                      {:text "A diagram is shown here." :pause 400}
+                      :else
+                      {:text "A code block is shown here." :pause 300})]
+            (recur rest-lines nil nil (conj segments seg)))
+
+          ;; Inside fence — skip
+          in-fence
+          (recur rest-lines in-fence fence-type segments)
+
+          ;; Table row — collect and summarize
+          (re-matches #"^\|.*\|$" line)
+          (if (and (not-empty rest-lines)
+                   (re-matches #"^\|[-:|  ]+\|$" (first rest-lines)))
+            ;; Header + separator — count remaining rows
+            (let [after-sep (rest rest-lines)
+                  data-rows (take-while #(re-matches #"^\|.*\|$" %) after-sep)
+                  n (count data-rows)
+                  remaining (drop n after-sep)]
+              (recur remaining in-fence fence-type
+                     (conj segments
+                           {:text (str "A table with " n " rows is shown here.")
+                            :pause 400})))
+            ;; Continuation of table — skip
+            (recur rest-lines in-fence fence-type segments))
+
+          ;; List item
+          (re-matches #"^\s*[-*]\s+(.+)$" line)
+          (let [[_ item-text] (re-matches #"^\s*[-*]\s+(.+)$" line)]
+            (recur rest-lines in-fence fence-type
+                   (conj segments
+                         {:text (str (strip-markdown item-text) ".")
+                          :pause 300})))
+
+          ;; Numbered list item
+          (re-matches #"^\s*\d+\.\s+(.+)$" line)
+          (let [[_ item-text] (re-matches #"^\s*\d+\.\s+(.+)$" line)]
+            (recur rest-lines in-fence fence-type
+                   (conj segments
+                         {:text (str (strip-markdown item-text) ".")
+                          :pause 300})))
+
+          ;; Blank line — skip
+          (str/blank? line)
+          (recur rest-lines in-fence fence-type segments)
+
+          ;; Regular paragraph line — accumulate with next lines
+          :else
+          (let [para-lines (cons line
+                                 (take-while #(and (not (str/blank? %))
+                                                   (not (re-matches #"^```.*$" %))
+                                                   (not (re-matches #"^\|.*\|$" %))
+                                                   (not (re-matches #"^\s*[-*]\s+" %))
+                                                   (not (re-matches #"^\s*\d+\.\s+" %))
+                                                   (not (re-matches #"^#{2,3}\s+" %)))
+                                             rest-lines))
+                n (count para-lines)
+                text (strip-markdown (str/join " " para-lines))
+                remaining (drop (dec n) rest-lines)]
+            (if (> (count text) 0)
+              (recur remaining in-fence fence-type
+                     (conj segments {:text text :pause 400}))
+              (recur remaining in-fence fence-type segments))))))))
+
+(defn section->segments
+  "Convert a section [heading lines] into speech segments."
+  [[heading lines]]
+  (let [title-seg {:text (str (:title heading) ".") :pause 500}
+        content-segs (classify-block lines)]
+    (into [title-seg] content-segs)))
+
+(defn process-file
+  "Process a markdown file and return speech JSON map."
+  [filepath]
+  (let [content (slurp filepath)
+        sections (parse-sections content)]
+    (into {}
+          (map (fn [[heading lines :as section]]
+                 [(slug (:title heading))
+                  (section->segments section)])
+               sections))))
+
+(defn -main [& args]
+  (when (empty? args)
+    (println "Usage: mkdocs-speech <docs-dir>")
+    (println "  Generates .speech.json for each .md file in the directory.")
+    (System/exit 1))
+  (let [docs-dir (first args)
+        md-files (->> (file-seq (io/file docs-dir))
+                      (filter #(.isFile %))
+                      (filter #(str/ends-with? (.getName %) ".md")))]
+    (doseq [f md-files]
+      (let [speech-data (process-file (.getPath f))
+            out-path (str/replace (.getPath f) #"\.md$" ".speech.json")]
+        (when (not-empty speech-data)
+          (spit out-path (json/generate-string speech-data {:pretty true}))
+          (println (str "  " out-path)))))))
+
+(apply -main *command-line-args*)
