@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var currentIndex = 0;
   var pauseTimer = null;
   var speechData = null;
+  var generation = 0; // incremented on stop to invalidate callbacks
 
   // Try loading speech JSON for this page
   var pagePath = window.location.pathname
@@ -42,7 +43,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function getHeadingText(heading) {
     var cloned = heading.cloneNode(true);
-    // Remove the button and any anchor links
     cloned.querySelectorAll("button, a.headerlink").forEach(function (el) {
       el.remove();
     });
@@ -51,7 +51,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function collectSegments(heading, elements) {
     var segments = [];
-    // Read the heading first
     var title = getHeadingText(heading);
     if (title.length > 0) {
       segments.push({ text: title + ".", pause: 500 });
@@ -80,7 +79,6 @@ document.addEventListener("DOMContentLoaded", function () {
       .replace(/(^-|-$)/g, "");
   }
 
-  // ▶ = play, ❚❚ = pause, ■ = stop (double-click)
   function createButton() {
     var btn = document.createElement("button");
     btn.textContent = "\u25B6";
@@ -99,6 +97,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function fullStop(btn) {
+    generation++;
     if (pauseTimer) {
       clearTimeout(pauseTimer);
       pauseTimer = null;
@@ -109,6 +108,7 @@ document.addEventListener("DOMContentLoaded", function () {
     paused = false;
     if (btn) {
       btn.textContent = "\u25B6";
+      btn.title = "Read aloud (click: play/pause)";
       btn.style.opacity = "0.5";
     }
     playing = null;
@@ -132,7 +132,10 @@ document.addEventListener("DOMContentLoaded", function () {
     synth.resume();
   }
 
-  function speakSegment(btn) {
+  function speakSegment(btn, gen) {
+    // Stale callback — a stop/switch happened since this was queued
+    if (gen !== generation) return;
+
     if (currentIndex >= queue.length) {
       fullStop(btn);
       return;
@@ -140,21 +143,22 @@ document.addEventListener("DOMContentLoaded", function () {
     var seg = queue[currentIndex];
     if (seg.skip) {
       currentIndex++;
-      speakSegment(btn);
+      speakSegment(btn, gen);
       return;
     }
     var utterance = new SpeechSynthesisUtterance(seg.text);
     utterance.rate = seg.rate || 1.0;
     utterance.onend = function () {
+      if (gen !== generation) return;
       currentIndex++;
       var pause = seg.pause || 200;
       if (pause > 0) {
         pauseTimer = setTimeout(function () {
           pauseTimer = null;
-          speakSegment(btn);
+          speakSegment(btn, gen);
         }, pause);
       } else {
-        speakSegment(btn);
+        speakSegment(btn, gen);
       }
     };
     synth.speak(utterance);
@@ -192,7 +196,7 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
       }
 
-      // Stop any other section that's playing
+      // Stop any other section that's playing or paused
       if (playing) {
         fullStop(playing);
       }
@@ -210,7 +214,7 @@ document.addEventListener("DOMContentLoaded", function () {
       btn.title = "Pause";
       btn.style.opacity = "1";
       playing = btn;
-      speakSegment(btn);
+      speakSegment(btn, generation);
     });
   });
 });
