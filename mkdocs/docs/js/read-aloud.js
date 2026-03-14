@@ -5,6 +5,28 @@ document.addEventListener("DOMContentLoaded", function () {
   var playing = null;
   var queue = [];
   var currentIndex = 0;
+  var speechData = null;
+
+  // Try loading speech JSON for this page
+  var pagePath = window.location.pathname
+    .replace(/\/$/, "")
+    .replace(/\/index$/, "");
+  var speechUrl = pagePath + ".speech.json";
+  if (pagePath === "" || pagePath === "/") {
+    speechUrl = "/index.speech.json";
+  }
+
+  fetch(speechUrl)
+    .then(function (r) {
+      if (r.ok) return r.json();
+      return null;
+    })
+    .then(function (data) {
+      speechData = data;
+    })
+    .catch(function () {
+      speechData = null;
+    });
 
   function extractText(el) {
     var cloned = el.cloneNode(true);
@@ -22,14 +44,24 @@ document.addEventListener("DOMContentLoaded", function () {
       if (el.tagName === "UL" || el.tagName === "OL") {
         el.querySelectorAll(":scope > li").forEach(function (li) {
           var text = extractText(li);
-          if (text.length > 0) segments.push(text + ".");
+          if (text.length > 0) {
+            segments.push({ text: text + ".", pause: 300 });
+          }
         });
       } else {
         var text = extractText(el);
-        if (text.length > 0) segments.push(text);
+        if (text.length > 0) {
+          segments.push({ text: text, pause: 200 });
+        }
       }
     });
     return segments;
+  }
+
+  function getSectionId(heading) {
+    return heading.id || heading.textContent.trim().toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
   }
 
   function createButton() {
@@ -60,18 +92,29 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  function speakNext(btn) {
+  function speakSegment(btn) {
     if (currentIndex >= queue.length) {
       btn.textContent = "\u25B6";
       btn.style.opacity = "0.5";
       playing = null;
       return;
     }
-    var utterance = new SpeechSynthesisUtterance(queue[currentIndex]);
-    utterance.rate = 1.0;
+    var seg = queue[currentIndex];
+    if (seg.skip) {
+      currentIndex++;
+      speakSegment(btn);
+      return;
+    }
+    var utterance = new SpeechSynthesisUtterance(seg.text);
+    utterance.rate = seg.rate || 1.0;
     utterance.onend = function () {
       currentIndex++;
-      speakNext(btn);
+      var pause = seg.pause || 200;
+      if (pause > 0) {
+        setTimeout(function () { speakSegment(btn); }, pause);
+      } else {
+        speakSegment(btn);
+      }
     };
     synth.speak(utterance);
   }
@@ -85,9 +128,10 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     if (section.length === 0) return;
 
-    var segments = collectSegments(section);
-    if (segments.length === 0) return;
+    var fallbackSegments = collectSegments(section);
+    if (fallbackSegments.length === 0) return;
 
+    var sectionId = getSectionId(heading);
     var btn = createButton();
     heading.appendChild(btn);
 
@@ -101,12 +145,19 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       stopSpeaking();
-      queue = segments;
+
+      // Prefer speech JSON if available for this section
+      if (speechData && speechData[sectionId]) {
+        queue = speechData[sectionId];
+      } else {
+        queue = fallbackSegments;
+      }
+
       currentIndex = 0;
       btn.textContent = "\u25A0";
       btn.style.opacity = "1";
       playing = btn;
-      speakNext(btn);
+      speakSegment(btn);
     });
   });
 });
