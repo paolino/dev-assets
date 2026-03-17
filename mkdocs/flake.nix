@@ -33,6 +33,7 @@
           mkdocs-deploy = pkgs.writeShellScriptBin "mkdocs-deploy" ''
             mkdocs gh-deploy "$@"
             rc=$?
+            chmod -R u+w site/ 2>/dev/null
             rm -rf site/
             exit $rc
           '';
