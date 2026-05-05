@@ -1,0 +1,106 @@
+name: "Shared static preview"
+description: "Publish or clean up static PR previews on preview.dev.plutimus.com"
+
+inputs:
+  mode:
+    description: "Action mode: publish or cleanup"
+    required: false
+    default: "publish"
+  path:
+    description: "Static directory to publish when mode is publish"
+    required: false
+    default: "site-root"
+  preview-root:
+    description: "Filesystem root that is served by the shared preview host"
+    required: false
+    default: "/opt/services/previews"
+  preview-host:
+    description: "Public base URL for the shared preview host"
+    required: false
+    default: "https://preview.dev.plutimus.com"
+  owner:
+    description: "Preview URL owner segment. Defaults to github.repository_owner"
+    required: false
+    default: ""
+  repository:
+    description: "Preview URL repository segment. Defaults to the current repository name"
+    required: false
+    default: ""
+  pr-number:
+    description: "Pull request number. Defaults to github.event.number"
+    required: false
+    default: ""
+  comment:
+    description: "Whether to upsert a preview URL comment when publishing"
+    required: false
+    default: "true"
+  comment-marker:
+    description: "HTML marker used to find and update an existing preview comment"
+    required: false
+    default: "<!-- shared-static-preview-url -->"
+
+outputs:
+  preview-url:
+    description: "Public preview URL"
+    value: ${{ steps.preview.outputs.preview_url }}
+  preview-path:
+    description: "Filesystem preview directory"
+    value: ${{ steps.preview.outputs.preview_path }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: preview
+      shell: bash
+      env:
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_PREVIEW_ROOT: ${{ inputs.preview-root }}
+        INPUT_PREVIEW_HOST: ${{ inputs.preview-host }}
+        INPUT_OWNER: ${{ inputs.owner }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_PR_NUMBER: ${{ inputs.pr-number }}
+        GITHUB_EVENT_NUMBER: ${{ github.event.number }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "$ACTION_PATH/scripts/preview.sh"
+
+    - name: Comment preview URL on PR
+      if: ${{ inputs.mode == 'publish' && inputs.comment == 'true' }}
+      uses: actions/github-script@v7
+      env:
+        PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+        PREVIEW_PR_NUMBER: ${{ steps.preview.outputs.pr_number }}
+        PREVIEW_COMMENT_MARKER: ${{ inputs.comment-marker }}
+      with:
+        script: |
+          const url = process.env.PREVIEW_URL;
+          const marker = process.env.PREVIEW_COMMENT_MARKER;
+          const issue_number = Number(process.env.PREVIEW_PR_NUMBER);
+
+          if (!Number.isInteger(issue_number) || issue_number <= 0) {
+            core.setFailed(`Invalid pull request number: ${process.env.PREVIEW_PR_NUMBER}`);
+            return;
+          }
+
+          const body = `${marker}\nPreview: ${url}`;
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number,
+          });
+          const existing = comments.find(comment => comment.body && comment.body.includes(marker));
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number,
+              body,
+            });
+          }
