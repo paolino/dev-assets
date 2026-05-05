@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+  echo "::error::$*" >&2
+  exit 1
+}
+
+write_output() {
+  local name="$1"
+  local value="$2"
+
+  if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+    printf '%s=%s\n' "$name" "$value" >>"$GITHUB_OUTPUT"
+  fi
+}
+
+mode="${INPUT_MODE:-publish}"
+source_path="${INPUT_PATH:-site-root}"
+preview_root="${INPUT_PREVIEW_ROOT:-/opt/services/previews}"
+preview_host="${INPUT_PREVIEW_HOST:-https://preview.dev.plutimus.com}"
+owner="${INPUT_OWNER:-${GITHUB_REPOSITORY_OWNER:-}}"
+repository="${INPUT_REPOSITORY:-}"
+pr_number="${INPUT_PR_NUMBER:-${GITHUB_EVENT_NUMBER:-}}"
+
+if [[ -z "$repository" && -n "${GITHUB_REPOSITORY:-}" ]]; then
+  repository="${GITHUB_REPOSITORY#*/}"
+fi
+
+case "$mode" in
+  publish | cleanup) ;;
+  *) fail "Unsupported static preview mode: $mode" ;;
+esac
+
+[[ -n "$owner" ]] || fail "Missing preview owner. Set owner or run in a GitHub repository context."
+[[ -n "$repository" ]] || fail "Missing preview repository. Set repository or run in a GitHub repository context."
+[[ -n "$pr_number" ]] || fail "Missing pull request number. Set pr-number or run from a pull_request event."
+
+preview_root="${preview_root%/}"
+preview_host="${preview_host%/}"
+preview_owner_dir="$preview_root/$owner"
+preview_parent="$preview_owner_dir/$repository"
+preview_dir="$preview_parent/pr-$pr_number"
+preview_url="$preview_host/$owner/$repository/pr-$pr_number/"
+
+write_output "preview_url" "$preview_url"
+write_output "preview_path" "$preview_dir"
+write_output "owner" "$owner"
+write_output "repository" "$repository"
+write_output "pr_number" "$pr_number"
+
+if [[ "$mode" == "cleanup" ]]; then
+  rm -rf "$preview_dir"
+  rmdir --ignore-fail-on-non-empty "$preview_parent" 2>/dev/null || true
+  rmdir --ignore-fail-on-non-empty "$preview_owner_dir" 2>/dev/null || true
+  echo "::notice::Removed static preview $preview_url"
+  exit 0
+fi
+
+[[ -d "$source_path" ]] || fail "Static preview path does not exist or is not a directory: $source_path"
+source_path="$(cd "$source_path" && pwd -P)"
+
+run_id="${GITHUB_RUN_ID:-manual}"
+run_attempt="${GITHUB_RUN_ATTEMPT:-1}"
+preview_tmp="$preview_dir.tmp-$run_id-$run_attempt-$$"
+
+cleanup_tmp() {
+  rm -rf "$preview_tmp"
+}
+trap cleanup_tmp EXIT
+
+umask 0002
+mkdir -p "$preview_parent"
+rm -rf "$preview_tmp"
+mkdir -p "$preview_tmp"
+
+(cd "$source_path" && find -L . -type d -print) | while IFS= read -r path; do
+  mkdir -p "$preview_tmp/$path"
+done
+
+(cd "$source_path" && find -L . -type f -print) | while IFS= read -r path; do
+  install -m 664 "$source_path/$path" "$preview_tmp/$path"
+done
+
+rm -rf "$preview_dir"
+mv "$preview_tmp" "$preview_dir"
+trap - EXIT
+
+echo "::notice::Published static preview $preview_url"
