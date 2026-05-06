@@ -1,0 +1,244 @@
+name: "Darwin Homebrew release"
+description: "Build Darwin flake artifacts, smoke-test Homebrew formulae, and optionally publish release/tap updates"
+
+inputs:
+  mode:
+    description: "release or dev-homebrew"
+    required: true
+  tag:
+    description: "Release tag when mode is release"
+    required: false
+    default: ""
+  publish:
+    description: "Whether release mode should upload release assets and update the tap"
+    required: false
+    default: "no"
+  update-tap:
+    description: "Whether dev-homebrew mode should update the tap"
+    required: false
+    default: "yes"
+  dev-tag:
+    description: "Moving GitHub release tag used for dev Homebrew builds"
+    required: false
+    default: "dev-homebrew"
+  release-package:
+    description: "Flake package output for release artifacts"
+    required: false
+    default: "darwin-release-artifacts"
+  dev-package:
+    description: "Flake package output for dev Homebrew artifacts"
+    required: false
+    default: "darwin-dev-homebrew-artifacts"
+  release-formula:
+    description: "Formula filename produced by the release package"
+    required: true
+  dev-formula:
+    description: "Formula filename produced by the dev package"
+    required: true
+  release-artifact-name:
+    description: "Workflow artifact name for release mode"
+    required: false
+    default: "darwin-release-bundle"
+  dev-artifact-name:
+    description: "Workflow artifact name for dev Homebrew mode"
+    required: false
+    default: "darwin-dev-homebrew-artifacts"
+  tarball-pattern:
+    description: "find(1) pattern for the Darwin tarball"
+    required: false
+    default: "*-aarch64-darwin.tar.gz"
+  installed-commands:
+    description: "Space-separated executable names expected in bin/"
+    required: true
+  cleanup-formulae:
+    description: "Space-separated Homebrew formulae to uninstall before smoke tests"
+    required: false
+    default: ""
+  tarball-smoke-script:
+    description: "Shell script run with DARWIN_BUNDLE_DIR and bundled bin/ on PATH"
+    required: false
+    default: ""
+  brew-smoke-script:
+    description: "Shell script run after brew install/test"
+    required: false
+    default: ""
+  tap-name:
+    description: "Homebrew tap name, for example lambdasistemi/tap"
+    required: true
+  tap-repository:
+    description: "GitHub repository for the tap, for example lambdasistemi/homebrew-tap"
+    required: true
+  tap-token:
+    description: "Token with write access to tap-repository, required when updating the tap"
+    required: false
+    default: ""
+  github-token:
+    description: "Token used by gh for release operations"
+    required: false
+    default: ""
+  release-notes-command:
+    description: "Command that writes release notes to stdout; TAG is exported"
+    required: false
+    default: ""
+  release-check-command:
+    description: "Command that validates release mode before building; TAG is exported"
+    required: false
+    default: ""
+  release-title:
+    description: "GitHub release title for release mode; defaults to '<repo> <tag>'"
+    required: false
+    default: ""
+  dev-release-title:
+    description: "GitHub release title for dev Homebrew mode"
+    required: false
+    default: ""
+  upload-artifact:
+    description: "Upload the generated tarball and formula as a workflow artifact"
+    required: false
+    default: "true"
+  retention-days:
+    description: "Workflow artifact retention days"
+    required: false
+    default: "30"
+
+outputs:
+  artifact-path:
+    description: "Built artifact directory"
+    value: ${{ steps.build.outputs.path }}
+  tarball:
+    description: "Built Darwin tarball path"
+    value: ${{ steps.build.outputs.tarball }}
+  formula:
+    description: "Generated formula path"
+    value: ${{ steps.build.outputs.formula }}
+  asset:
+    description: "Generated tarball basename"
+    value: ${{ steps.build.outputs.asset }}
+  artifact-name:
+    description: "Workflow artifact name"
+    value: ${{ steps.build.outputs.artifact_name }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate mode and build artifacts
+      id: build
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_TAG: ${{ inputs.tag }}
+        INPUT_RELEASE_PACKAGE: ${{ inputs.release-package }}
+        INPUT_DEV_PACKAGE: ${{ inputs.dev-package }}
+        INPUT_RELEASE_FORMULA: ${{ inputs.release-formula }}
+        INPUT_DEV_FORMULA: ${{ inputs.dev-formula }}
+        INPUT_RELEASE_ARTIFACT_NAME: ${{ inputs.release-artifact-name }}
+        INPUT_DEV_ARTIFACT_NAME: ${{ inputs.dev-artifact-name }}
+        INPUT_TARBALL_PATTERN: ${{ inputs.tarball-pattern }}
+        INPUT_RELEASE_CHECK_COMMAND: ${{ inputs.release-check-command }}
+      run: bash "$ACTION_PATH/scripts/build.sh"
+
+    - name: Smoke-test Darwin tarball
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        INPUT_TARBALL: ${{ steps.build.outputs.tarball }}
+        INPUT_INSTALLED_COMMANDS: ${{ inputs.installed-commands }}
+        INPUT_TARBALL_SMOKE_SCRIPT: ${{ inputs.tarball-smoke-script }}
+      run: bash "$ACTION_PATH/scripts/smoke-tarball.sh"
+
+    - name: Test generated formula through local tap
+      if: ${{ github.event_name == 'pull_request' }}
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        INPUT_FORMULA: ${{ steps.build.outputs.formula }}
+        INPUT_TARBALL: ${{ steps.build.outputs.tarball }}
+        INPUT_TAP_NAME: ${{ inputs.tap-name }}
+        INPUT_TAP_REPOSITORY: ${{ inputs.tap-repository }}
+        INPUT_CLEANUP_FORMULAE: ${{ inputs.cleanup-formulae }}
+        INPUT_BREW_SMOKE_SCRIPT: ${{ inputs.brew-smoke-script }}
+      run: bash "$ACTION_PATH/scripts/test-local-tap.sh"
+
+    - name: Upload workflow artifact
+      if: ${{ inputs.upload-artifact == 'true' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.build.outputs.artifact_name }}
+        path: |
+          ${{ steps.build.outputs.tarball }}
+          ${{ steps.build.outputs.formula }}
+        if-no-files-found: error
+        retention-days: ${{ inputs.retention-days }}
+
+    - name: Create release and upload artifact
+      if: ${{ inputs.mode == 'release' && (inputs.publish == 'yes' || inputs.publish == 'true') }}
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        INPUT_TAG: ${{ inputs.tag }}
+        INPUT_TARBALL: ${{ steps.build.outputs.tarball }}
+        INPUT_RELEASE_NOTES_COMMAND: ${{ inputs.release-notes-command }}
+        INPUT_RELEASE_TITLE: ${{ inputs.release-title }}
+        GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+      run: bash "$ACTION_PATH/scripts/publish-release.sh"
+
+    - name: Update homebrew tap
+      if: ${{ inputs.mode == 'release' && (inputs.publish == 'yes' || inputs.publish == 'true') }}
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        INPUT_TAP_TOKEN: ${{ inputs.tap-token }}
+        INPUT_TAP_REPOSITORY: ${{ inputs.tap-repository }}
+        INPUT_FORMULA: ${{ steps.build.outputs.formula }}
+        INPUT_TAG: ${{ inputs.tag }}
+      run: bash "$ACTION_PATH/scripts/update-tap.sh"
+
+    - name: Test brew install
+      if: ${{ inputs.mode == 'release' && (inputs.publish == 'yes' || inputs.publish == 'true') }}
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        INPUT_TAP_NAME: ${{ inputs.tap-name }}
+        INPUT_TAP_REPOSITORY: ${{ inputs.tap-repository }}
+        INPUT_FORMULA: ${{ steps.build.outputs.formula }}
+        INPUT_CLEANUP_FORMULAE: ${{ inputs.cleanup-formulae }}
+        INPUT_BREW_SMOKE_SCRIPT: ${{ inputs.brew-smoke-script }}
+      run: bash "$ACTION_PATH/scripts/test-tap-install.sh"
+
+    - name: Publish dev GitHub release asset
+      if: ${{ inputs.mode == 'dev-homebrew' && github.event_name == 'workflow_dispatch' }}
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        INPUT_DEV_TAG: ${{ inputs.dev-tag }}
+        INPUT_TARBALL: ${{ steps.build.outputs.tarball }}
+        INPUT_ASSET: ${{ steps.build.outputs.asset }}
+        INPUT_FORMULA: ${{ steps.build.outputs.formula }}
+        INPUT_DEV_RELEASE_TITLE: ${{ inputs.dev-release-title }}
+        GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+      run: bash "$ACTION_PATH/scripts/publish-dev-release.sh"
+
+    - name: Update dev homebrew tap
+      if: ${{ inputs.mode == 'dev-homebrew' && github.event_name == 'workflow_dispatch' && inputs.update-tap == 'yes' }}
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        INPUT_TAP_TOKEN: ${{ inputs.tap-token }}
+        INPUT_TAP_REPOSITORY: ${{ inputs.tap-repository }}
+        INPUT_FORMULA: ${{ steps.build.outputs.formula }}
+      run: bash "$ACTION_PATH/scripts/update-tap.sh"
+
+    - name: Test dev brew install
+      if: ${{ inputs.mode == 'dev-homebrew' && github.event_name == 'workflow_dispatch' && inputs.update-tap == 'yes' }}
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        INPUT_TAP_NAME: ${{ inputs.tap-name }}
+        INPUT_TAP_REPOSITORY: ${{ inputs.tap-repository }}
+        INPUT_FORMULA: ${{ steps.build.outputs.formula }}
+        INPUT_CLEANUP_FORMULAE: ${{ inputs.cleanup-formulae }}
+        INPUT_BREW_SMOKE_SCRIPT: ${{ inputs.brew-smoke-script }}
+      run: bash "$ACTION_PATH/scripts/test-tap-install.sh"
