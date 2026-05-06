@@ -44,7 +44,9 @@ Each selected flake package must produce one directory containing:
 - the selected Homebrew formula file
 - `SHA256SUMS`
 
-The shared Nix helper `lib.mkDarwinHomebrewBundle` already emits that layout:
+The shared Nix helper `lib.mkDarwinHomebrewBundle` already emits that layout.
+See [the Nix library docs](../nix/lib/README.md) for its full flake API,
+parameters, output contract, and limitations:
 
 ```text
 result/
