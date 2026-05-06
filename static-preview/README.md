@@ -41,7 +41,7 @@ jobs:
     if: github.event.action != 'closed'
     runs-on: nixos
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: ./build-static-site.sh
       - uses: paolino/dev-assets/static-preview@main
         with:
