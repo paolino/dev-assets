@@ -69,6 +69,15 @@ cleanup_tmp() {
 }
 trap cleanup_tmp EXIT
 
+cleanup_old_previews() {
+  local old_preview
+
+  for old_preview in "$preview_dir".old-*; do
+    [[ -e "$old_preview" || -L "$old_preview" ]] || continue
+    rm -rf "$old_preview" 2>/dev/null || true
+  done
+}
+
 umask 0002
 mkdir -p "$preview_parent"
 rm -rf "$preview_tmp"
@@ -82,8 +91,15 @@ done
   install -m 664 "$source_path/$path" "$preview_tmp/$path"
 done
 
-rm -rf "$preview_dir"
+old_preview=""
+if [[ -e "$preview_dir" || -L "$preview_dir" ]]; then
+  old_preview="$preview_dir.old-$run_id-$run_attempt-$$"
+  mv "$preview_dir" "$old_preview"
+fi
+
 mv "$preview_tmp" "$preview_dir"
 trap - EXIT
+
+cleanup_old_previews
 
 echo "::notice::Published static preview $preview_url"
