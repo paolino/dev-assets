@@ -66,3 +66,25 @@ if find "$preview_parent" -maxdepth 1 -name 'pr-42.old-*' -print -quit | grep -q
   echo "old preview backups were not cleaned up" >&2
   exit 1
 fi
+
+cleanup_preview_dir="$preview_parent/pr-43"
+cleanup_locked="$cleanup_preview_dir/freeze-workflow"
+mkdir -p "$cleanup_locked"
+printf 'locked preview\n' >"$cleanup_locked/index.html"
+chmod 555 "$cleanup_locked" "$cleanup_preview_dir"
+
+INPUT_MODE=cleanup \
+INPUT_PATH="$source_path" \
+INPUT_PREVIEW_ROOT="$preview_root" \
+INPUT_PREVIEW_HOST="https://preview.example.invalid" \
+INPUT_OWNER=example \
+INPUT_REPOSITORY=repo \
+INPUT_PR_NUMBER=43 \
+GITHUB_RUN_ID=12347 \
+GITHUB_RUN_ATTEMPT=1 \
+bash "$preview_script" >"$tmp/cleanup-output.log"
+
+if [[ -e "$cleanup_preview_dir" || -L "$cleanup_preview_dir" ]]; then
+  echo "cleanup preview remained visible after cleanup mode" >&2
+  exit 1
+fi
