@@ -42,6 +42,8 @@ preview_owner_dir="$preview_root/$owner"
 preview_parent="$preview_owner_dir/$repository"
 preview_dir="$preview_parent/pr-$pr_number"
 preview_url="$preview_host/$owner/$repository/pr-$pr_number/"
+run_id="${GITHUB_RUN_ID:-manual}"
+run_attempt="${GITHUB_RUN_ATTEMPT:-1}"
 
 write_output "preview_url" "$preview_url"
 write_output "preview_path" "$preview_dir"
@@ -49,8 +51,23 @@ write_output "owner" "$owner"
 write_output "repository" "$repository"
 write_output "pr_number" "$pr_number"
 
+remove_preview_dir() {
+  local target="$1"
+  local removed_target
+
+  [[ -e "$target" || -L "$target" ]] || return 0
+
+  if rm -rf "$target" 2>/dev/null; then
+    return 0
+  fi
+
+  removed_target="$target.removed-$run_id-$run_attempt-$$"
+  mv "$target" "$removed_target"
+  rm -rf "$removed_target" 2>/dev/null || true
+}
+
 if [[ "$mode" == "cleanup" ]]; then
-  rm -rf "$preview_dir"
+  remove_preview_dir "$preview_dir"
   rmdir --ignore-fail-on-non-empty "$preview_parent" 2>/dev/null || true
   rmdir --ignore-fail-on-non-empty "$preview_owner_dir" 2>/dev/null || true
   echo "::notice::Removed static preview $preview_url"
@@ -60,8 +77,6 @@ fi
 [[ -d "$source_path" ]] || fail "Static preview path does not exist or is not a directory: $source_path"
 source_path="$(cd "$source_path" && pwd -P)"
 
-run_id="${GITHUB_RUN_ID:-manual}"
-run_attempt="${GITHUB_RUN_ATTEMPT:-1}"
 preview_tmp="$preview_dir.tmp-$run_id-$run_attempt-$$"
 
 cleanup_tmp() {
