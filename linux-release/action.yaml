@@ -1,0 +1,152 @@
+name: "Linux release"
+description: "Build Linux flake artifacts (AppImage / DEB / RPM), smoke-test them, and optionally publish a GitHub release"
+
+inputs:
+  mode:
+    description: "release or dev-linux"
+    required: true
+  tag:
+    description: "Release tag when mode is release"
+    required: false
+    default: ""
+  publish:
+    description: "Whether release mode should upload release assets"
+    required: false
+    default: "no"
+  release-output:
+    description: "Flake package output for release artifacts"
+    required: true
+  dev-output:
+    description: "Flake package output for dev-linux artifacts"
+    required: true
+  executable-name:
+    description: "Name of the executable; drives smoke and artifact naming"
+    required: true
+  usage-grep:
+    description: "Substring expected in the executable's no-args stderr"
+    required: true
+  dev-tag:
+    description: "Moving GitHub release tag for dev-linux builds"
+    required: true
+  release-version-command:
+    description: "Command producing the base artifact version on stdout; TAG is exported"
+    required: true
+  release-check-command:
+    description: "Command that validates release mode before building; TAG is exported"
+    required: false
+    default: ""
+  release-notes-command:
+    description: "Command that writes release notes to stdout; TAG is exported"
+    required: false
+    default: ""
+  release-title:
+    description: "GitHub release title for release mode; defaults to '<repo> <tag>'"
+    required: false
+    default: ""
+  dev-release-title:
+    description: "GitHub release title for dev-linux mode; defaults to '<exe> dev Linux bundles'"
+    required: false
+    default: ""
+  artifact-name-prefix:
+    description: "Workflow artifact name prefix for release mode; suffixed with -<executable-name>"
+    required: false
+    default: "linux-release-bundles"
+  dev-artifact-name-prefix:
+    description: "Workflow artifact name prefix for dev-linux mode; suffixed with -<executable-name>"
+    required: false
+    default: "linux-dev-release-bundles"
+  upload-artifact:
+    description: "Upload the generated artifacts as a workflow artifact"
+    required: false
+    default: "true"
+  retention-days:
+    description: "Workflow artifact retention days"
+    required: false
+    default: "30"
+  smoke-app:
+    description: "Flake app name for the Linux artifact smoke harness"
+    required: false
+    default: "linux-artifact-smoke"
+  github-token:
+    description: "Token used by gh for release operations"
+    required: false
+    default: ""
+
+outputs:
+  artifact-version:
+    description: "Computed artifact version"
+    value: ${{ steps.build.outputs.artifact_version }}
+  artifact-name:
+    description: "Workflow artifact name"
+    value: ${{ steps.build.outputs.artifact_name }}
+  artifacts-dir:
+    description: "Absolute path to the staged artifacts directory"
+    value: ${{ steps.build.outputs.artifacts_dir }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate mode, build, and smoke-test
+      id: build
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_TAG: ${{ inputs.tag }}
+        INPUT_RELEASE_OUTPUT: ${{ inputs.release-output }}
+        INPUT_DEV_OUTPUT: ${{ inputs.dev-output }}
+        INPUT_EXECUTABLE_NAME: ${{ inputs.executable-name }}
+        INPUT_USAGE_GREP: ${{ inputs.usage-grep }}
+        INPUT_RELEASE_VERSION_COMMAND: ${{ inputs.release-version-command }}
+        INPUT_RELEASE_CHECK_COMMAND: ${{ inputs.release-check-command }}
+        INPUT_ARTIFACT_NAME_PREFIX: ${{ inputs.artifact-name-prefix }}
+        INPUT_DEV_ARTIFACT_NAME_PREFIX: ${{ inputs.dev-artifact-name-prefix }}
+        INPUT_SMOKE_APP: ${{ inputs.smoke-app }}
+      run: bash "$ACTION_PATH/scripts/build.sh"
+
+    - name: Upload workflow artifact
+      if: ${{ inputs.upload-artifact == 'true' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.build.outputs.artifact_name }}
+        path: ${{ steps.build.outputs.artifacts_dir }}/*
+        if-no-files-found: error
+        retention-days: ${{ inputs.retention-days }}
+
+    - name: Create release and upload artifacts
+      if: ${{ inputs.mode == 'release' && (inputs.publish == 'yes' || inputs.publish == 'true') }}
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        INPUT_TAG: ${{ inputs.tag }}
+        INPUT_ARTIFACTS_DIR: ${{ steps.build.outputs.artifacts_dir }}
+        INPUT_RELEASE_NOTES_COMMAND: ${{ inputs.release-notes-command }}
+        INPUT_RELEASE_TITLE: ${{ inputs.release-title }}
+        GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+      run: bash "$ACTION_PATH/scripts/publish-release.sh"
+
+    - name: Publish dev Linux release assets
+      if: ${{ inputs.mode == 'dev-linux' && github.event_name == 'workflow_dispatch' }}
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        INPUT_DEV_TAG: ${{ inputs.dev-tag }}
+        INPUT_EXECUTABLE_NAME: ${{ inputs.executable-name }}
+        INPUT_ARTIFACTS_DIR: ${{ steps.build.outputs.artifacts_dir }}
+        INPUT_DEV_RELEASE_TITLE: ${{ inputs.dev-release-title }}
+      run: bash "$ACTION_PATH/scripts/publish-dev-release.sh"
+
+    - name: Smoke-test dev Linux release assets
+      if: ${{ inputs.mode == 'dev-linux' && github.event_name == 'workflow_dispatch' }}
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        INPUT_DEV_TAG: ${{ inputs.dev-tag }}
+        INPUT_EXECUTABLE_NAME: ${{ inputs.executable-name }}
+        INPUT_USAGE_GREP: ${{ inputs.usage-grep }}
+        INPUT_ARTIFACT_VERSION: ${{ steps.build.outputs.artifact_version }}
+        INPUT_SMOKE_APP: ${{ inputs.smoke-app }}
+      run: bash "$ACTION_PATH/scripts/smoke-dev-release.sh"
