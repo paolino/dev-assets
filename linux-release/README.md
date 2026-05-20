@@ -90,3 +90,15 @@ See `action.yaml` for the canonical list. Required: `mode`,
 5. On `dev-linux` mode with `workflow_dispatch`: download the
    just-uploaded assets and re-smoke (catches release-asset
    corruption).
+
+## Tests
+
+Run the dispatch integration test locally with:
+
+```
+bash linux-release/tests/build-dispatch.sh
+```
+
+It PATH-shims `nix` to exercise `build.sh` across release,
+dev-linux, and input-validation paths without touching the
+real Nix store. CI runs the same script on every PR.
