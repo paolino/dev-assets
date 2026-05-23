@@ -28,13 +28,38 @@
           swagger-ui-tag-fixed = pkgs.python3Packages.mkdocs-swagger-ui-tag.overridePythonAttrs (old: {
             doCheck = false; # Skips the failing pytest suite — plugin works fine without it
           });
-          # Wrapper that cleans up site/ after gh-deploy to prevent
-          # read-only files from blocking subsequent CI checkouts
-          mkdocs-deploy = pkgs.writeShellScriptBin "mkdocs-deploy" ''
-            mkdocs gh-deploy "$@"
+          # Theme assets in /nix/store are mode 0444 / 0555. mkdocs uses
+          # shutil.copy2 which preserves those bits, leaving the built
+          # site/ tree non-writable and blocking subsequent CI checkouts
+          # on self-hosted runners. Wrap mkdocs so build/gh-deploy always
+          # leave the site dir writable.
+          mkdocsFixPerms = ''
+            site_dir="site"
+            for ((i=1; i<=$#; i++)); do
+              case "''${!i}" in
+                --site-dir)
+                  j=$((i+1)); site_dir="''${!j}"
+                  ;;
+                --site-dir=*)
+                  site_dir="''${!i#--site-dir=}"
+                  ;;
+              esac
+            done
+            if [[ -d "$site_dir" ]]; then
+              chmod -R u+w "$site_dir" 2>/dev/null || true
+            fi
+          '';
+          mkdocs-wrapped = pkgs.writeShellScriptBin "mkdocs" ''
+            ${pkgs.mkdocs}/bin/mkdocs "$@"
             rc=$?
-            chmod -R u+w site/ 2>/dev/null
-            rm -rf site/
+            ${mkdocsFixPerms}
+            exit $rc
+          '';
+          mkdocs-deploy = pkgs.writeShellScriptBin "mkdocs-deploy" ''
+            ${pkgs.mkdocs}/bin/mkdocs gh-deploy "$@"
+            rc=$?
+            ${mkdocsFixPerms}
+            rm -rf "$site_dir"
             exit $rc
           '';
           plugins = {
@@ -58,8 +83,11 @@
         {
           packages = plugins // { inherit mkdocs-speech; };
           devShells.default = pkgs.mkShell {
+            # mkdocs-wrapped must come before pkgs.mkdocs so the wrapper
+            # shadows the raw binary on PATH.
             packages = [
               pkgs.graphviz
+              mkdocs-wrapped
               pkgs.mkdocs
               mkdocs-deploy
               mkdocs-speech
