@@ -1,10 +1,10 @@
 # Tasks — Shared Linux nix lib + musl + aarch64 (#27)
 
 ## Slice 1 — mk-linux-bundle
-- [ ] T27-S1 flake: add `nixpkgs` + `bundlers` inputs + per-system scaffold.
-- [ ] T27-S1 GREEN: `nix/lib/mk-linux-bundle.nix` (AppImage/DEB/RPM, configurable
+- [X] T27-S1 flake: add `nixpkgs` + `bundlers` inputs + per-system scaffold.
+- [X] T27-S1 GREEN: `nix/lib/mk-linux-bundle.nix` (AppImage/DEB/RPM, configurable
       `artifacts`); export from `nix/lib/default.nix`.
-- [ ] T27-S1 proof: self-test builds hello AppImage + DEB + RPM; files exist.
+- [X] T27-S1 proof: self-test builds hello AppImage + DEB + RPM; files exist.
 
 ## Slice 2 — mk-musl-tarball
 - [ ] T27-S2 GREEN: `nix/lib/mk-musl-tarball.nix` → static `.tar.gz`.
