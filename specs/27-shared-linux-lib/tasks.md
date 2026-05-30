@@ -23,6 +23,6 @@
       (x86_64|aarch64) and the musl artifact.
 
 ## Slice 5 — self-test CI
-- [ ] T27-S5 GREEN: dev-assets flake self-test outputs (hello matrix per system).
-- [ ] T27-S5 CI: job builds the x86_64 matrix + aarch64 leg on ubuntu-24.04-arm,
+- [X] T27-S5 GREEN: dev-assets flake self-test outputs (hello matrix per system).
+- [X] T27-S5 CI: job builds the x86_64 matrix + aarch64 leg on ubuntu-24.04-arm,
       smokes every artifact from its extracted form.
