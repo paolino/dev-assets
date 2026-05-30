@@ -30,8 +30,15 @@
           package = pkgs.hello;
           artifacts = glibcArtifacts;
         };
+        selfTestMusl = lib.mkMuslTarball {
+          inherit pkgs system;
+          executableName = "hello";
+          version = "2.12.1";
+          package = pkgs.pkgsStatic.hello;
+        };
       in
       {
         packages.self-test = selfTest;
+        packages.self-test-musl = selfTestMusl;
       });
 }
