@@ -24,7 +24,11 @@ built="$(printf '%s\n' "$plan" | awk '
   inblock && /^[[:space:]]+\/nix\/store\// { print }
 ')"
 
-ghc="$(printf '%s\n' "$built" | grep -E '/nix/store/.*-ghc-[0-9][^[:space:]]*' || true)"
+# Match the GHC compiler by its derivation NAME (immediately after the store
+# hash): /nix/store/<hash>-ghc-<version>. This deliberately excludes the cheap
+# ghc-shell-for-packages-...-env wrapper (whose name starts "ghc-shell"), which
+# is rebuilt locally on every haskell.nix build and is not the 30-40 min cost.
+ghc="$(printf '%s\n' "$built" | grep -E '/nix/store/[a-z0-9]+-ghc-[0-9][^[:space:]]*' || true)"
 
 if [ -n "$ghc" ]; then
   echo "cachix gate FAILED: GHC would be built from source (cache miss):" >&2
