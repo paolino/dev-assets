@@ -23,22 +23,30 @@
           then [ "appimage" ]
           else [ "appimage" "deb" "rpm" ];
         # GHC-free self-test: prove the lib without dragging haskell.nix in.
-        selfTest = lib.mkLinuxBundle {
+        # The full per-exe matrix: glibc bundle + musl tarball + SHA256SUMS.
+        selfTest = lib.mkLinuxArtifacts {
           inherit pkgs system bundlers;
           executableName = "hello";
           version = "2.12.1";
-          package = pkgs.hello;
-          artifacts = glibcArtifacts;
+          glibcPackage = pkgs.hello;
+          muslPackage = pkgs.pkgsStatic.hello;
+          glibcArtifacts = glibcArtifacts;
         };
-        selfTestMusl = lib.mkMuslTarball {
-          inherit pkgs system;
-          executableName = "hello";
-          version = "2.12.1";
-          package = pkgs.pkgsStatic.hello;
+        selfTestSmokeHarness = lib.mkLinuxArtifactSmoke { inherit pkgs system; };
+        selfTestSmoke = pkgs.writeShellApplication {
+          name = "self-test-smoke";
+          runtimeInputs = [ selfTestSmokeHarness ];
+          text = ''
+            linux-artifact-smoke \
+              --artifacts-dir ${selfTest} \
+              --artifact-version 2.12.1 \
+              --executable-name hello \
+              --usage-grep "Hello, world!"
+          '';
         };
       in
       {
         packages.self-test = selfTest;
-        packages.self-test-musl = selfTestMusl;
+        packages.self-test-smoke = selfTestSmoke;
       });
 }

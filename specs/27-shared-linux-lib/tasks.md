@@ -12,9 +12,9 @@
       linked; binary runs.
 
 ## Slice 3 — smoke + compose
-- [ ] T27-S3 GREEN: `nix/lib/mk-linux-artifact-smoke.nix` (musl smoke + artifact
+- [X] T27-S3 GREEN: `nix/lib/mk-linux-artifact-smoke.nix` (musl smoke + artifact
       set) and `nix/lib/mk-linux-artifacts.nix` (compose + SHA256SUMS).
-- [ ] T27-S3 proof: full hello matrix builds; smoke passes from extracted form.
+- [X] T27-S3 proof: full hello matrix builds; smoke passes from extracted form.
 
 ## Slice 4 — action arch/musl
 - [ ] T27-S4 RED: extend `linux-release/tests/build-dispatch.sh` for `arch` +
