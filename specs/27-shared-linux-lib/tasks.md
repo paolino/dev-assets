@@ -17,9 +17,9 @@
 - [X] T27-S3 proof: full hello matrix builds; smoke passes from extracted form.
 
 ## Slice 4 — action arch/musl
-- [ ] T27-S4 RED: extend `linux-release/tests/build-dispatch.sh` for `arch` +
+- [X] T27-S4 RED: extend `linux-release/tests/build-dispatch.sh` for `arch` +
       musl staging.
-- [ ] T27-S4 GREEN: `linux-release/action.yaml` + `build.sh` handle `arch`
+- [X] T27-S4 GREEN: `linux-release/action.yaml` + `build.sh` handle `arch`
       (x86_64|aarch64) and the musl artifact.
 
 ## Slice 5 — self-test CI

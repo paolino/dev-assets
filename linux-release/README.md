@@ -1,12 +1,31 @@
 # Linux release composite action
 
-Build Linux flake artifacts (AppImage / DEB / RPM), smoke-test them
-against the executable's no-args stderr, optionally publish a
-GitHub release, and re-smoke the published assets.
+Build Linux flake artifacts (AppImage / DEB / RPM + a static musl
+tarball), smoke-test them against the executable's no-args output,
+optionally publish a GitHub release, and re-smoke the published
+assets. Works for `x86_64-linux` and `aarch64-linux`.
 
 Mirrors `darwin-homebrew-release/` for the Linux side. The two
 actions together cover both halves of a Cabal-owned release
 pipeline driven by Nix flake outputs.
+
+## Architectures & artifact matrix
+
+| System | AppImage | DEB | RPM | musl tarball |
+|---|---|---|---|---|
+| `x86_64-linux` | ✓ | ✓ | ✓ | ✓ |
+| `aarch64-linux` | ✓ | — | — | ✓ |
+
+Architecture is determined by the **runner** plus the per-system
+flake output — the action itself takes no `arch` input. For
+`aarch64-linux`, run the job on `runs-on: ubuntu-24.04-arm` and
+point `release-output` at the aarch64 package. The smoke harness
+(`dev-assets.lib.mkLinuxArtifactSmoke`) defaults its artifact set
+per system, so aarch64 automatically skips DEB/RPM.
+
+Consumers build these artifacts with `dev-assets.lib.mkLinuxArtifacts`
+(glibc bundle via `NixOS/bundlers` + static musl tarball + a combined
+`SHA256SUMS`); see `nix/lib/`.
 
 ## Consumer contract
 
@@ -17,8 +36,12 @@ The consumer's flake must expose:
   `<exe>-linux-dev-release-artifacts`; pass them via
   `release-output` / `dev-output`.
 - A smoke app named `linux-artifact-smoke` (override via
-  `smoke-app`) that accepts `--artifacts-dir`,
-  `--artifact-version`, `--executable-name`, and `--usage-grep`.
+  `smoke-app`; produced by `dev-assets.lib.mkLinuxArtifactSmoke`)
+  that accepts `--artifacts-dir`, `--artifact-version`,
+  `--executable-name`, `--usage-grep`, and optionally
+  `--artifacts a,b,c`. It extracts every artifact (AppImage / DEB /
+  RPM / musl) and requires `--usage-grep` to appear in the
+  executable's combined stdout+stderr no-args output.
 - A version-emitting command (typically
   `scripts/release/get-cabal-version`) supplied via
   `release-version-command`. The action concatenates the git
