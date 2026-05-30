@@ -7,8 +7,8 @@
 - [X] T27-S1 proof: self-test builds hello AppImage + DEB + RPM; files exist.
 
 ## Slice 2 — mk-musl-tarball
-- [ ] T27-S2 GREEN: `nix/lib/mk-musl-tarball.nix` → static `.tar.gz`.
-- [ ] T27-S2 proof: `pkgsStatic.hello` tarball extracts; `file` shows statically
+- [X] T27-S2 GREEN: `nix/lib/mk-musl-tarball.nix` → static `.tar.gz`.
+- [X] T27-S2 proof: `pkgsStatic.hello` tarball extracts; `file` shows statically
       linked; binary runs.
 
 ## Slice 3 — smoke + compose
