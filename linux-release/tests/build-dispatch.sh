@@ -24,6 +24,8 @@ mkdir -p "$fixture_dir"
 printf 'appimage\n' >"$fixture_dir/foo-0.0.1.AppImage"
 printf 'deb\n'      >"$fixture_dir/foo-0.0.1.deb"
 printf 'rpm\n'      >"$fixture_dir/foo-0.0.1.rpm"
+printf 'musl\n'     >"$fixture_dir/foo-0.0.1-musl.tar.gz"
+printf 'sums\n'     >"$fixture_dir/SHA256SUMS"
 
 shim_dir="$tmp/bin"
 mkdir -p "$shim_dir"
@@ -160,6 +162,10 @@ test -d "$workspace/artifacts" \
   || { echo "release: artifacts/ not created" >&2; exit 1; }
 test -f "$workspace/artifacts/foo-0.0.1.AppImage" \
   || { echo "release: AppImage not copied" >&2; exit 1; }
+test -f "$workspace/artifacts/foo-0.0.1-musl.tar.gz" \
+  || { echo "release: musl tarball not copied" >&2; exit 1; }
+test -f "$workspace/artifacts/SHA256SUMS" \
+  || { echo "release: SHA256SUMS not copied" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
 # Case 2: happy-path dev-linux mode (short-sha suffix on the version).
