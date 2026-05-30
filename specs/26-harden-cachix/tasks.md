@@ -15,9 +15,10 @@
 - [X] T26-S2 gate: shellcheck + the new test green.
 
 ## Slice C — README + linux warmup + arm CI
-- [ ] T26-S3 README: `setup-nix/README.md` documents read+push, toggle,
+- [X] T26-S3 README: `setup-nix/README.md` documents read+push, toggle,
       verification, warmup onboarding.
-- [ ] T26-S3 CI: `.github/workflows/ci.yml` runs `setup-nix` on
+- [X] T26-S3 CI: `.github/workflows/ci.yml` runs `setup-nix` on
       `ubuntu-24.04-arm` + a trivial nix check.
-- [ ] T26-S3 warmup: companion PR to lambdasistemi/cachix-warmup adds
+- [X] T26-S3 warmup: companion PR to lambdasistemi/cachix-warmup adds
       `linux-ghc.yml` (x86_64 + aarch64-linux) with in-scope repos; linked.
+      Companion PR: lambdasistemi/cachix-warmup#4.
