@@ -27,11 +27,12 @@ else
 fi
 
 # Real nix self-test of the x86_64 artifact matrix, once the output exists.
-selftest="self-test-x86_64-linux"
-if command -v nix >/dev/null 2>&1 && nix eval ".#packages.x86_64-linux.${selftest}.outPath" >/dev/null 2>&1; then
-  echo "==> nix self-test matrix (.#${selftest})"
-  nix build --quiet ".#${selftest}" -o /tmp/dev-assets-selftest
-  nix run --quiet ".#self-test-smoke-x86_64-linux"
+if command -v nix >/dev/null 2>&1 && nix eval ".#packages.x86_64-linux.self-test.outPath" >/dev/null 2>&1; then
+  echo "==> nix self-test matrix (.#self-test)"
+  nix build --quiet ".#self-test" -o /tmp/dev-assets-selftest
+  if nix eval ".#packages.x86_64-linux.self-test-smoke.outPath" >/dev/null 2>&1; then
+    nix run --quiet ".#self-test-smoke"
+  fi
 else
   echo "==> self-test output not present yet — skipping nix matrix build"
 fi
