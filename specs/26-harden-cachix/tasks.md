@@ -8,11 +8,11 @@
 - [X] T26-S1 gate: shellcheck + actionlint + config-assertions test green.
 
 ## Slice B — no-GHC-from-source verification
-- [ ] T26-S2 RED: `setup-nix/tests/assert-no-source-ghc.sh` shims nix dry-run
+- [X] T26-S2 RED: `setup-nix/tests/assert-no-source-ghc.sh` shims nix dry-run
       (with/without ghc build) and asserts exit codes + message.
-- [ ] T26-S2 GREEN: `setup-nix/scripts/assert-no-source-ghc.sh` implements the
+- [X] T26-S2 GREEN: `setup-nix/scripts/assert-no-source-ghc.sh` implements the
       dry-run scan.
-- [ ] T26-S2 gate: shellcheck + the new test green.
+- [X] T26-S2 gate: shellcheck + the new test green.
 
 ## Slice C — README + linux warmup + arm CI
 - [ ] T26-S3 README: `setup-nix/README.md` documents read+push, toggle,
