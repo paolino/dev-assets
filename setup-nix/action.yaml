@@ -1,21 +1,33 @@
 name: "Setup Nix and Cachix (paolino)"
-description: "Install Nix + IOHK cache + authenticate to paolino Cachix"
+description: "Install Nix + IOHK/paolino read caches + optional paolino Cachix push"
 inputs:
   cachix-auth-token:
-    description: "Cachix auth token for the paolino cache"
-    required: true
+    description: "Cachix auth token for the paolino cache; omit on forks for read-only"
+    required: false
+    default: ""
+  push:
+    description: "Push newly built paths to the paolino cache (requires a token)"
+    required: false
+    default: "true"
 
 runs:
   using: "composite"
   steps:
     - uses: cachix/install-nix-action@v31
       with:
+        # paolino is declared here as a read substituter directly, not only as
+        # a side effect of the cachix-action push step below — so fork PRs
+        # without a token and arm runners still read GHC from cache instead of
+        # cold-compiling it. See paolino/dev-assets#26.
         extra_nix_config: |
-          trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
-          substituters = https://cache.iog.io https://cache.nixos.org/
+          trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= paolino.cachix.org-1:ecmgO3CXdgSWA2cHlm4srknd/cLFMLmK3i3NrzeDFaE=
+          substituters = https://cache.iog.io https://cache.nixos.org/ https://paolino.cachix.org
           accept-flake-config = true
 
     - uses: cachix/cachix-action@v15
       with:
         name: paolino
-        authToken: ${{ inputs.cachix-auth-token }}   # now it works
+        authToken: ${{ inputs.cachix-auth-token }}
+        # Degrade to read-only when push is disabled or no token is present
+        # (e.g. fork PRs): configure the substituter, skip the authenticated push.
+        skipPush: ${{ inputs.push != 'true' || inputs.cachix-auth-token == '' }}
