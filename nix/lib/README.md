@@ -3,16 +3,47 @@
 `paolino/dev-assets` exposes shared Nix helpers through its flake `lib` output:
 
 ```nix
-inputs.dev-assets.url = "github:paolino/dev-assets";
+inputs.dev-assets.url = "github:paolino/dev-assets/v0.1.0";
 ```
 
 Current exports:
 
-- `lib.mkDarwinHomebrewBundle`
+- `lib.mkLinuxArtifacts` — AppImage + DEB + RPM (glibc) + optional musl tarball, per executable
+- `lib.mkLinuxBundle` — the glibc AppImage/DEB/RPM half
+- `lib.mkMuslTarball` — the static musl tarball half
+- `lib.mkLinuxArtifactSmoke` — runs each built artifact and greps a usage string
+- `lib.mkDarwinHomebrewBundle` — Darwin tarball + generated Homebrew formula
 
 The library is intentionally small. It provides deterministic artifact builders
 that project flakes can call, while CI workflows or GitHub Actions handle
-networked release side effects.
+networked release side effects. The top-level
+[`README.md`](../../README.md) documents the full artifact matrix and the
+per-repo wiring recipe.
+
+## Linux helpers
+
+`mkLinuxArtifacts` is the composite entry point — apply it per executable:
+
+```nix
+<exe>-linux-release-artifacts = inputs.dev-assets.lib.mkLinuxArtifacts {
+  inherit pkgs system;
+  executableName = "<exe>";
+  version = packageVersion;
+  glibcPackage = <exe-glibc>;   # produces AppImage + DEB + RPM
+  muslPackage  = <exe-musl>;    # produces the static musl tarball; pass null to skip
+  bundlers = inputs.bundlers;   # github:NixOS/bundlers, nixpkgs following yours
+};
+```
+
+It composes `mkLinuxBundle` (glibc AppImage/DEB/RPM via the NixOS bundlers) and
+`mkMuslTarball` (the static tarball). The default artifact set is symmetric:
+`[ "appimage" "deb" "rpm" "musl" ]`. Output names follow
+`<exe>-<version>-<system>.<ext>` plus a per-exe/system `SHA256SUMS`.
+
+`mkLinuxArtifactSmoke { inherit pkgs system; }` builds a check that runs each
+artifact and greps a usage string; override `--usage-grep` when the executable
+does not print the default `Usage:` token (e.g. an optparse-applicative tool
+that prints `Missing:` on no args, or needs `--help`).
 
 ## mkDarwinHomebrewBundle
 
