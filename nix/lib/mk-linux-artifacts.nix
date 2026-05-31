@@ -13,9 +13,9 @@
 , muslPackage ? null
 , bundlers
 , glibcArtifacts ? (
-    if system == "aarch64-linux"
-    then [ "appimage" ]
-    else [ "appimage" "deb" "rpm" ]
+    # Symmetric across arches: aarch64 ships DEB/RPM too (NixOS bundlers
+    # support them on aarch64-linux). Proven by the arm self-test.
+    [ "appimage" "deb" "rpm" ]
   )
 }:
 let

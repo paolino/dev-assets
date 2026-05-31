@@ -18,10 +18,7 @@
     // flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        glibcArtifacts =
-          if system == "aarch64-linux"
-          then [ "appimage" ]
-          else [ "appimage" "deb" "rpm" ];
+        glibcArtifacts = [ "appimage" "deb" "rpm" ];
         # GHC-free self-test: prove the lib without dragging haskell.nix in.
         # The full per-exe matrix: glibc bundle + musl tarball + SHA256SUMS.
         selfTest = lib.mkLinuxArtifacts {
