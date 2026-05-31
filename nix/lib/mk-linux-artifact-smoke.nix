@@ -1,14 +1,11 @@
 # Generalized Linux artifact smoke harness. Extracts each artifact from its
 # packaged form and runs the executable, requiring an optional substring in its
-# combined (stdout+stderr) no-args output. The artifact set defaults per system
-# (aarch64 has no DEB/RPM) and can be overridden with --artifacts.
+# combined (stdout+stderr) no-args output. The artifact set defaults to the full
+# symmetric matrix (AppImage/DEB/RPM/musl on both arches) and can be overridden
+# with --artifacts.
 { pkgs
 , system
-, artifacts ? (
-    if system == "aarch64-linux"
-    then [ "appimage" "musl" ]
-    else [ "appimage" "deb" "rpm" "musl" ]
-  )
+, artifacts ? [ "appimage" "deb" "rpm" "musl" ]
 }:
 let
   defaultArtifacts = builtins.concatStringsSep "," artifacts;
