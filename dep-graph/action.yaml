@@ -1,0 +1,57 @@
+name: "Dependency graph (paolino)"
+description: >-
+  Generate a Markdown dependency graph (Mermaid + tables + pin-skew) for a
+  Nix-flake project, combining the flake closure with the package manager's
+  pinned git dependencies. Haskell (cabal) today; language-dispatched.
+
+inputs:
+  language:
+    description: "Dependency extractor to use. Supported: haskell."
+    required: false
+    default: "haskell"
+  flake-path:
+    description: "Path to the root flake / project to analyze."
+    required: false
+    default: "."
+  owner-regex:
+    description: >-
+      Regex of managed GitHub orgs to include as graph nodes (e.g.
+      'paolino|lambdasistemi'). Dependencies outside it are treated as
+      upstream infrastructure and omitted.
+    required: true
+  output:
+    description: "Where to write the Markdown report. Use '-' for stdout."
+    required: false
+    default: "docs/dependencies.md"
+  title:
+    description: "H1 title for the generated document."
+    required: false
+    default: "Dependency Graph"
+  staleness:
+    description: >-
+      Include 'N behind HEAD' / diverged-branch annotations (live external
+      state). Set to 'false' for a deterministic render suitable for a CI
+      drift gate (pure function of the pinned inputs).
+    required: false
+    default: "true"
+
+outputs:
+  path:
+    description: "Path to the generated Markdown file (empty when output is '-')."
+    value: ${{ steps.gen.outputs.path }}
+
+runs:
+  using: "composite"
+  steps:
+    - id: gen
+      shell: bash
+      env:
+        INPUT_LANGUAGE: ${{ inputs.language }}
+        INPUT_FLAKE_PATH: ${{ inputs.flake-path }}
+        INPUT_OWNER_REGEX: ${{ inputs.owner-regex }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_TITLE: ${{ inputs.title }}
+        INPUT_STALENESS: ${{ inputs.staleness }}
+        ACTION_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ github.token }}
+      run: bash "$ACTION_PATH/scripts/run.sh"
