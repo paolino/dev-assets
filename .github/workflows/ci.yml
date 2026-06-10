@@ -58,6 +58,28 @@ jobs:
       - name: paolino is configured as a read substituter
         run: nix config show substituters | tr ' ' '\n' | grep -qx 'https://paolino.cachix.org'
 
+  dep-graph-test:
+    name: dep-graph render
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./setup-nix
+        with:
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - id: graph
+        uses: ./dep-graph
+        with:
+          language: haskell
+          owner-regex: "numtide|NixOS"
+          output: /tmp/dev-assets-deps.md
+          title: "dev-assets dependency graph"
+          staleness: "false"
+      - name: Assert output shape
+        run: >-
+          bash dep-graph/tests/assert-output.sh
+          "${{ steps.graph.outputs.path }}"
+          "dev-assets dependency graph"
+
   lib-self-test:
     name: lib self-test (${{ matrix.system }})
     runs-on: ${{ matrix.runner }}
