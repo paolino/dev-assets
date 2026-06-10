@@ -157,6 +157,24 @@
   (let [flake (slurp (str flake-path "/flake.nix"))]
     (second (re-find #"description\s*=\s*\"([^\"]+)\"" flake))))
 
+(defn short12
+  "Truncate a 40-char git sha to 12 chars; leave short refs (branch names,
+   short tags) untouched."
+  [s]
+  (if (and s (> (count s) 12)) (subs s 0 12) s))
+
+;; Display ref for the ROOT's own self-links. In --no-staleness (deterministic)
+;; mode use the default branch, NOT the HEAD sha: the committed doc lives in
+;; this same repo, so embedding HEAD would make it differ from any regen at a
+;; later commit, and a drift gate could never pass. In staleness mode keep the
+;; exact sha (that render is live, not gated).
+(def root-ref
+  (if no-staleness?
+    (let [b (try (sh-home "gh" "api" (str "repos/" root-id) "--jq" ".default_branch")
+                 (catch Exception _ ""))]
+      (if (seq b) b "HEAD"))
+    root-rev))
+
 ;; ── Step 3: Cabal source-repository-package (recursive) ────────────────────
 
 (def visited-cabal (atom #{}))
@@ -218,8 +236,8 @@
         (let [deps (parse-source-repo-packages content)]
           (concat
            (for [dep deps]
-             {:from owner-repo :from-rev (subs rev 0 12)
-              :to (:owner-repo dep) :to-rev (subs (:tag dep) 0 12)
+             {:from owner-repo :from-rev (short12 rev)
+              :to (:owner-repo dep) :to-rev (short12 (:tag dep))
               :to-rev-full (:tag dep) :line (:line dep) :kind "cabal"})
            (mapcat #(collect-cabal-edges (:owner-repo %) (:tag %)) deps)))))))
 
@@ -229,7 +247,7 @@
   ;; each dependency's own cabal.project at its pinned rev, so the transitive
   ;; mirror structure (e.g. cardano-node-clients -> chain-follower -> ...) is
   ;; discovered automatically instead of being filled in by hand.
-  (->> (cons {:id root-id :rev root-rev-full} managed-nodes)
+  (->> (cons {:id root-id :rev root-ref} managed-nodes)
        (mapcat #(collect-cabal-edges (:id %) (:rev %)))
        (filter some?)
        (distinct)
@@ -611,7 +629,7 @@
   (do (println "| Repo | Owner | Description |")
       (println "|------|-------|-------------|")
       (printf "| [**%s**](https://github.com/%s/tree/%s) | %s | %s |\n"
-              root-name root-owner root-rev (first (str/split root-owner #"/")) root-desc)
+              root-name root-owner root-ref (first (str/split root-owner #"/")) root-desc)
       (doseq [repo unique-repos]
         (let [name (last (str/split repo #"/"))
               owner (first (str/split repo #"/"))
@@ -643,7 +661,7 @@
   (println "|-------|--------|------|--------|")
   (doseq [e root-edges]
     (printf "| `%s` | %s `%s` | %s | [flake.nix](https://github.com/%s/blob/%s/flake.nix) |\n"
-            (:via e) (:to e) (:to-rev e) (:kind e) root-owner root-rev))
+            (:via e) (:to e) (:to-rev e) (:kind e) root-owner root-ref))
   (println)
 
   (doseq [[from edges] (group-by :from internal-edges)]
@@ -697,8 +715,8 @@
 ;; Root node
 (let [rlang (if (re-find #"(?i)purescript|explorer" (or root-desc "")) "PureScript" "Unknown")]
   (printf "    %s[\"<a href='https://github.com/%s/tree/%s'>%s</a><br/>%s<br/><a href='https://github.com/%s/commit/%s'><code>%s</code></a>\"]:::%s\n"
-          (node-id root-owner) root-owner root-rev root-name (wrap-desc root-desc)
-          root-owner root-rev root-rev (lang->class rlang)))
+          (node-id root-owner) root-owner root-ref root-name (wrap-desc root-desc)
+          root-owner root-ref root-ref (lang->class rlang)))
 
 ;; Other nodes (deduplicated)
 (doseq [repo unique-repos]
