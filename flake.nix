@@ -45,5 +45,10 @@
       {
         packages.self-test = selfTest;
         packages.self-test-smoke = selfTestSmoke;
+        packages.graph-easy = pkgs.graph-easy;
+        apps.graph-easy = flake-utils.lib.mkApp {
+          drv = pkgs.graph-easy;
+          exePath = "/bin/graph-easy";
+        };
       });
 }

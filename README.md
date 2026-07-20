@@ -58,6 +58,16 @@ in the workflows. See [`nix/lib/README.md`](./nix/lib/README.md) for signatures.
   (configurable `--usage-grep` over combined stdout+stderr).
 - `mkDarwinHomebrewBundle` — Darwin tarball + Homebrew formula.
 
+## Graph rendering
+
+Render a small graph directly from this flake, without creating a Nix shell:
+
+```sh
+printf '[ A ] -> [ B ]\n' | nix run github:paolino/dev-assets#graph-easy
+```
+
+`graph-easy` turns concise node-and-edge descriptions into readable text graphs.
+
 ## Wiring recipe (new executable repo)
 
 1. **Flake inputs** — add `bundlers` and pin `dev-assets` to the tag:
