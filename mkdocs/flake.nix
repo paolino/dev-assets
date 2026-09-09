@@ -76,12 +76,20 @@
               ps.mkdocs-macros-plugin
             ]);
           };
+          # Material renders ```mermaid fences natively but, unless `mermaid` is
+          # already defined, fetches it from unpkg at read time — outside any
+          # pinned, byte-verified site. Consumers copy this file into their site
+          # assets and list it in `extra_javascript` so no page loads a CDN.
+          mermaid-js = pkgs.fetchurl {
+            url = "https://unpkg.com/mermaid@11.17.2/dist/mermaid.min.js";
+            hash = "sha256-WB7X10vZBI0OOpE2OSfXLvIpQtdyJUayf3zCnjU5Drg=";
+          };
           mkdocs-speech = pkgs.writeShellScriptBin "mkdocs-speech" ''
             exec ${pkgs.babashka}/bin/bb ${./bin/mkdocs-speech} "$@"
           '';
         in
         {
-          packages = plugins // { inherit mkdocs-speech; };
+          packages = plugins // { inherit mkdocs-speech mermaid-js; };
           devShells.default = pkgs.mkShell {
             # mkdocs-wrapped must come before pkgs.mkdocs so the wrapper
             # shadows the raw binary on PATH.
@@ -93,6 +101,9 @@
               mkdocs-speech
             ]
             ++ (builtins.attrValues plugins);
+
+            # Pinned Mermaid for sites that vendor it (see mermaid-js above).
+            MERMAID_JS = "${mermaid-js}";
 
             shellHook = ''
               echo "MkDocs environment ready!"

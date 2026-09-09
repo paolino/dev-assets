@@ -61,6 +61,12 @@ digraph G {
 }
 ```
 
+Mermaid fences render through Material, which fetches Mermaid from unpkg at
+read time unless `mermaid` is already defined. A site whose bytes are checked
+or released should serve the pinned copy this flake exposes as
+`packages.<system>.mermaid-js` (also `$MERMAID_JS` in the dev shell): copy it
+into the site's assets and list it first in `extra_javascript`.
+
 ```mermaid
 graph TD;
     A[Start] --> B{Is it working?};
