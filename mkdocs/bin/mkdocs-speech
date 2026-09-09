@@ -3,7 +3,15 @@
 (ns mkdocs-speech
   (:require [clojure.string :as str]
             [clojure.java.io :as io]
-            [cheshire.core :as json]))
+            [cheshire.core :as json])
+  (:import [java.security MessageDigest]))
+
+(defn sha256-hex
+  "Hex SHA-256 of a file's bytes, matching `sha256sum`."
+  [path]
+  (let [d (MessageDigest/getInstance "SHA-256")
+        bytes (.digest d (java.nio.file.Files/readAllBytes (.toPath (io/file path))))]
+    (apply str (map #(format "%02x" %) bytes))))
 
 (defn slug
   "Convert heading text to mkdocs-style anchor ID."
@@ -147,12 +155,18 @@
   "Process a markdown file and return speech JSON map."
   [filepath]
   (let [content (slurp filepath)
-        sections (parse-sections content)]
-    (into {}
-          (map (fn [[heading lines :as section]]
-                 [(slug (:title heading))
-                  (section->segments section)])
-               sections))))
+        sections (parse-sections content)
+        speech (into {}
+                     (map (fn [[heading lines :as section]]
+                            [(slug (:title heading))
+                             (section->segments section)])
+                          sections))]
+    ;; `_source` binds the companion to the page bytes it was generated from;
+    ;; the documentation gate rejects a page whose hash no longer matches.
+    (if (empty? speech)
+      speech
+      (assoc speech "_source" {"file" (.getName (io/file filepath))
+                               "sha256" (sha256-hex filepath)}))))
 
 (defn -main [& args]
   (when (empty? args)
