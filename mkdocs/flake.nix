@@ -84,12 +84,31 @@
             url = "https://unpkg.com/mermaid@11.17.2/dist/mermaid.min.js";
             hash = "sha256-WB7X10vZBI0OOpE2OSfXLvIpQtdyJUayf3zCnjU5Drg=";
           };
-          mkdocs-speech = pkgs.writeShellScriptBin "mkdocs-speech" ''
-            exec ${pkgs.babashka}/bin/bb ${./bin/mkdocs-speech} "$@"
-          '';
+          # Renders each page with the site's own Markdown engine and writes what
+          # the reader sees as PAGE.speech.json (see the header of bin/mkdocs-speech).
+          mkdocs-speech =
+            let
+              python = pkgs.python3.withPackages (ps: [
+                ps.markdown
+                ps.pymdown-extensions
+                ps.pyyaml
+              ]);
+            in
+            pkgs.writeShellScriptBin "mkdocs-speech" ''
+              exec ${python}/bin/python3 ${./bin/mkdocs-speech} "$@"
+            '';
         in
         {
           packages = plugins // { inherit mkdocs-speech mermaid-js; };
+          # The companion of a fixture page must equal what a reader sees, and
+          # the same comparison must fail on an altered expectation.
+          checks.speech =
+            pkgs.runCommand "mkdocs-speech-check" { nativeBuildInputs = [ pkgs.python3 ]; }
+              ''
+                python3 ${./test/speech}/check.py ${mkdocs-speech}/bin/mkdocs-speech
+                python3 ${./test/speech}/check.py ${mkdocs-speech}/bin/mkdocs-speech --control
+                touch $out
+              '';
           devShells.default = pkgs.mkShell {
             # mkdocs-wrapped must come before pkgs.mkdocs so the wrapper
             # shadows the raw binary on PATH.

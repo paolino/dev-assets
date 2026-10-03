@@ -1,0 +1,70 @@
+{
+  "fixture-page": [
+    {
+      "text": "A note above the title.",
+      "pause": 400
+    },
+    {
+      "text": "Fixture page.",
+      "pause": 500
+    },
+    {
+      "text": "The lead under the title, with inline code, a link and bold words.",
+      "pause": 400
+    }
+  ],
+  "first-section": [
+    {
+      "text": "First section.",
+      "pause": 500
+    },
+    {
+      "text": "A paragraph that says one thing.",
+      "pause": 400
+    },
+    {
+      "text": "An item that says another",
+      "pause": 300
+    },
+    {
+      "text": "A nested item",
+      "pause": 300
+    },
+    {
+      "text": "A second item with raw markup.",
+      "pause": 300
+    },
+    {
+      "text": "A quotation a reader sees.",
+      "pause": 400
+    }
+  ],
+  "deeper-heading": [
+    {
+      "text": "Deeper heading.",
+      "pause": 500
+    },
+    {
+      "text": "Text under the deeper heading.",
+      "pause": 400
+    },
+    {
+      "text": "Deepest heading.",
+      "pause": 500
+    },
+    {
+      "text": "Text under the deepest heading, spoken inside the third-level section.",
+      "pause": 400
+    }
+  ],
+  "second-section": [
+    {
+      "text": "Second section.",
+      "pause": 500
+    },
+    {
+      "text": "Last words with a literal bracket.",
+      "pause": 400
+    }
+  ]
+}

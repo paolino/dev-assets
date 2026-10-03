@@ -1,187 +1,228 @@
-#!/usr/bin/env bb
+#!/usr/bin/env python3
+"""Write the speech companion (PAGE.speech.json) of every Markdown page in a directory.
 
-(ns mkdocs-speech
-  (:require [clojure.string :as str]
-            [clojure.java.io :as io]
-            [cheshire.core :as json])
-  (:import [java.security MessageDigest]))
+The companion holds what the page says and nothing else. Each page is rendered
+with the same Markdown engine and extensions the site is built with, and the
+spoken text is read from that rendering: every paragraph, list item and quotation
+a reader sees, in order, under the heading that owns it. Nothing is summarised,
+paraphrased or invented. Tables, code blocks, diagrams, navigation and buttons
+carry no prose and produce no segment, so the sentences around them must say what
+they show.
 
-(defn sha256-hex
-  "Hex SHA-256 of a file's bytes, matching `sha256sum`."
-  [path]
-  (let [d (MessageDigest/getInstance "SHA-256")
-        bytes (.digest d (java.nio.file.Files/readAllBytes (.toPath (io/file path))))]
-    (apply str (map #(format "%02x" %) bytes))))
+Sections are keyed by the heading ids the site generates. A section is an h2 or
+h3 and everything below it up to the next h2 or h3, so text under an h4 or deeper
+heading is spoken inside its h2/h3 section, after the deeper heading's own text.
+Prose that precedes the first h2/h3 (the lead under the page title) belongs to
+the h1 and is keyed by the h1 id. Text before the first heading (a note above the
+title, say) is spoken first inside the section of the first heading, as it is read
+on the page.
 
-(defn slug
-  "Convert heading text to mkdocs-style anchor ID."
-  [text]
-  (-> text
-      str/lower-case
-      str/trim
-      (str/replace #"[^a-z0-9\s-]" "")
-      (str/replace #"\s+" "-")
-      (str/replace #"^-|-$" "")))
+usage: mkdocs-speech [--config mkdocs.yml] DOCS_DIR
 
-(defn strip-markdown
-  "Remove markdown formatting, keep readable text."
-  [text]
-  (-> text
-      (str/replace #"\*\*([^*]+)\*\*" "$1")       ; bold
-      (str/replace #"\*([^*]+)\*" "$1")            ; italic
-      (str/replace #"`([^`]+)`" "$1")              ; inline code
-      (str/replace #"\[([^\]]+)\]\([^)]+\)" "$1")  ; links
-      str/trim))
+The extensions come from the `markdown_extensions` of --config, or of the first
+mkdocs.yml found in DOCS_DIR or above it, or default to the set the documentation
+sites share (tables, admonition, attr_list, toc, superfences with mermaid).
+"""
 
-(defn parse-sections
-  "Parse markdown into sections keyed by heading."
-  [content]
-  (let [lines (str/split-lines content)]
-    (loop [lines lines
-           current-heading nil
-           current-lines []
-           sections []]
-      (if (empty? lines)
-        (if current-heading
-          (conj sections [current-heading current-lines])
-          sections)
-        (let [line (first lines)
-              rest-lines (rest lines)]
-          (if-let [[_ hashes title] (re-matches #"^(#{2,3})\s+(.+)$" line)]
-            (let [new-sections (if current-heading
-                                 (conj sections [current-heading current-lines])
-                                 sections)]
-              (recur rest-lines
-                     {:level (count hashes) :title (strip-markdown title)}
-                     []
-                     new-sections))
-            (recur rest-lines
-                   current-heading
-                   (conj current-lines line)
-                   sections)))))))
+import argparse
+import hashlib
+import importlib
+import json
+import os
+import re
+import sys
+from html.parser import HTMLParser
+from pathlib import Path
 
-(defn classify-block
-  "Classify a block of lines and return speech segments."
-  [lines]
-  (loop [lines lines
-         in-fence nil
-         fence-type nil
-         segments []]
-    (if (empty? lines)
-      segments
-      (let [line (first lines)
-            rest-lines (rest lines)]
-        (cond
-          ;; Opening code fence
-          (and (not in-fence) (re-matches #"^```(\w*).*$" line))
-          (let [[_ lang] (re-matches #"^```(\w*).*$" line)]
-            (recur rest-lines true lang segments))
+import markdown
 
-          ;; Closing code fence
-          (and in-fence (re-matches #"^```\s*$" line))
-          (let [seg (cond
-                      (= fence-type "mermaid")
-                      {:text "A diagram is shown here." :pause 400}
-                      :else
-                      {:text "A code block is shown here." :pause 300})]
-            (recur rest-lines nil nil (conj segments seg)))
+PAUSE = {"p": 400, "li": 300, "blockquote": 400, "dd": 400, "dt": 300, "summary": 400, "title": 500}
+PROSE = tuple(k for k in PAUSE if k != "title")
+SILENT = ("pre", "table", "svg", "script", "style", "button", "nav", "dialog", "figure")
+HEADINGS = ("h1", "h2", "h3", "h4", "h5", "h6")
+VOID = ("br", "hr", "img", "input", "meta", "link", "wbr", "area", "col", "source", "track", "embed", "param")
+FIGURE_CLASS = re.compile(r"(^|\s)diagram(-links)?(\s|$)")
 
-          ;; Inside fence — skip
-          in-fence
-          (recur rest-lines in-fence fence-type segments)
 
-          ;; Table row — collect and summarize
-          (re-matches #"^\|.*\|$" line)
-          (if (and (not-empty rest-lines)
-                   (re-matches #"^\|[-:|  ]+\|$" (first rest-lines)))
-            ;; Header + separator — count remaining rows
-            (let [after-sep (rest rest-lines)
-                  data-rows (take-while #(re-matches #"^\|.*\|$" %) after-sep)
-                  n (count data-rows)
-                  remaining (drop n after-sep)]
-              (recur remaining in-fence fence-type
-                     (conj segments
-                           {:text (str "A table with " n " rows is shown here.")
-                            :pause 400})))
-            ;; Continuation of table — skip
-            (recur rest-lines in-fence fence-type segments))
+def sha256_hex(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
-          ;; List item
-          (re-matches #"^\s*[-*]\s+(.+)$" line)
-          (let [[_ item-text] (re-matches #"^\s*[-*]\s+(.+)$" line)]
-            (recur rest-lines in-fence fence-type
-                   (conj segments
-                         {:text (str (strip-markdown item-text) ".")
-                          :pause 300})))
 
-          ;; Numbered list item
-          (re-matches #"^\s*\d+\.\s+(.+)$" line)
-          (let [[_ item-text] (re-matches #"^\s*\d+\.\s+(.+)$" line)]
-            (recur rest-lines in-fence fence-type
-                   (conj segments
-                         {:text (str (strip-markdown item-text) ".")
-                          :pause 300})))
+def default_extensions():
+    from pymdownx.superfences import fence_code_format
 
-          ;; Blank line — skip
-          (str/blank? line)
-          (recur rest-lines in-fence fence-type segments)
+    names = ["tables", "admonition", "attr_list", "toc", "pymdownx.superfences"]
+    configs = {
+        "pymdownx.superfences": {
+            "custom_fences": [{"name": "mermaid", "class": "mermaid", "format": fence_code_format}]
+        }
+    }
+    return names, configs
 
-          ;; Regular paragraph line — accumulate with next lines
-          :else
-          (let [para-lines (cons line
-                                 (take-while #(and (not (str/blank? %))
-                                                   (not (re-matches #"^```.*$" %))
-                                                   (not (re-matches #"^\|.*\|$" %))
-                                                   (not (re-matches #"^\s*[-*]\s+" %))
-                                                   (not (re-matches #"^\s*\d+\.\s+" %))
-                                                   (not (re-matches #"^#{2,3}\s+" %)))
-                                             rest-lines))
-                n (count para-lines)
-                text (strip-markdown (str/join " " para-lines))
-                remaining (drop (dec n) rest-lines)]
-            (if (> (count text) 0)
-              (recur remaining in-fence fence-type
-                     (conj segments {:text text :pause 400}))
-              (recur remaining in-fence fence-type segments))))))))
 
-(defn section->segments
-  "Convert a section [heading lines] into speech segments."
-  [[heading lines]]
-  (let [title-seg {:text (str (:title heading) ".") :pause 500}
-        content-segs (classify-block lines)]
-    (into [title-seg] content-segs)))
+def load_extensions(config):
+    """The markdown_extensions of a mkdocs.yml, with its python/name tags resolved."""
+    import yaml
 
-(defn process-file
-  "Process a markdown file and return speech JSON map."
-  [filepath]
-  (let [content (slurp filepath)
-        sections (parse-sections content)
-        speech (into {}
-                     (map (fn [[heading lines :as section]]
-                            [(slug (:title heading))
-                             (section->segments section)])
-                          sections))]
-    ;; `_source` binds the companion to the page bytes it was generated from;
-    ;; the documentation gate rejects a page whose hash no longer matches.
-    (if (empty? speech)
-      speech
-      (assoc speech "_source" {"file" (.getName (io/file filepath))
-                               "sha256" (sha256-hex filepath)}))))
+    class Loader(yaml.SafeLoader):
+        pass
 
-(defn -main [& args]
-  (when (empty? args)
-    (println "Usage: mkdocs-speech <docs-dir>")
-    (println "  Generates .speech.json for each .md file in the directory.")
-    (System/exit 1))
-  (let [docs-dir (first args)
-        md-files (->> (file-seq (io/file docs-dir))
-                      (filter #(.isFile %))
-                      (filter #(str/ends-with? (.getName %) ".md")))]
-    (doseq [f md-files]
-      (let [speech-data (process-file (.getPath f))
-            out-path (str/replace (.getPath f) #"\.md$" ".speech.json")]
-        (when (not-empty speech-data)
-          (spit out-path (json/generate-string speech-data {:pretty true}))
-          (println (str "  " out-path)))))))
+    def python_name(loader, suffix, node):
+        module, _, attribute = (suffix or loader.construct_scalar(node)).rpartition(".")
+        return getattr(importlib.import_module(module), attribute)
 
-(apply -main *command-line-args*)
+    Loader.add_multi_constructor("tag:yaml.org,2002:python/name:", python_name)
+    Loader.add_constructor("!ENV", lambda loader, node: None)
+    data = yaml.load(config.read_text(encoding="utf-8"), Loader=Loader) or {}
+    names, configs = [], {}
+    for entry in data.get("markdown_extensions", []):
+        if isinstance(entry, str):
+            names.append(entry)
+        else:
+            for name, options in entry.items():
+                names.append(name)
+                configs[name] = options or {}
+    if "toc" not in names:
+        names.append("toc")
+    # Heading ids do not depend on the permalink; leave its anchor out of the text.
+    configs["toc"] = {k: v for k, v in configs.get("toc", {}).items() if k != "permalink"}
+    return names, configs
+
+
+def find_config(directory):
+    for folder in [directory, *directory.parents]:
+        candidate = folder / "mkdocs.yml"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def tidy(text):
+    return re.sub(r"\s+", " ", text).strip()
+
+
+class Speech(HTMLParser):
+    """Spoken segments of one rendered page, keyed by owning heading id, in document order."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.stack = []  # open elements: (tag, silent)
+        self.silent = 0
+        self.prose = []  # one text buffer per open prose element
+        self.kinds = []  # the tag of each open prose element
+        self.heading = None  # (level, id, text parts) while inside a heading
+        self.owner = None
+        self.sections = {}
+        self.levels = {}
+        self.pending = []  # text met before any heading owns a section
+
+    def _emit(self, text, kind):
+        text = tidy(text)
+        if not text:
+            return
+        target = self.sections[self.owner] if self.owner is not None else self.pending
+        target.append({"text": text, "pause": PAUSE[kind]})
+
+    def handle_starttag(self, tag, attrs):
+        if tag in VOID:
+            return
+        attrs = dict(attrs)
+        silent = tag in SILENT or bool(FIGURE_CLASS.search(attrs.get("class", "")))
+        self.stack.append((tag, silent))
+        if silent:
+            self.silent += 1
+            return
+        if self.silent:
+            return
+        if tag in HEADINGS:
+            self.heading = (int(tag[1]), attrs.get("id"), [])
+        elif tag in PROSE:
+            if self.prose:
+                self._emit("".join(self.prose[-1]), self.kinds[-1])
+                self.prose[-1] = []
+            self.prose.append([])
+            self.kinds.append(tag)
+
+
+    def handle_endtag(self, tag):
+        if tag in VOID:
+            return
+        names = [t for t, _ in self.stack]
+        if tag not in names:
+            return
+        while self.stack:
+            closed, silent = self.stack.pop()
+            if silent:
+                self.silent -= 1
+            elif not self.silent:
+                self._close(closed)
+            if closed == tag:
+                break
+
+    def _close(self, tag):
+        if tag in HEADINGS and self.heading is not None:
+            level, ident, parts = self.heading
+            self.heading = None
+            text = tidy("".join(parts))
+            if not text:
+                return
+            if level <= 3 and ident:
+                self.owner = ident
+                self.levels[ident] = level
+                self.sections.setdefault(ident, [])
+                self.sections[ident].extend(self.pending)
+                self.pending = []
+            self._emit(text + ".", "title")
+        elif tag in PROSE and self.prose:
+            self._emit("".join(self.prose.pop()), self.kinds.pop())
+
+    def handle_data(self, data):
+        if self.silent:
+            return
+        if self.heading is not None:
+            self.heading[2].append(data)
+        elif self.prose:
+            self.prose[-1].append(data)
+
+
+def speech_of(rendered):
+    parser = Speech()
+    parser.feed(rendered)
+    parser.close()
+    # An h1 with nothing but its own title is not a section a reader can play.
+    return {
+        key: segments
+        for key, segments in parser.sections.items()
+        if parser.levels[key] > 1 or len(segments) > 1
+    }
+
+
+def render(path, names, configs):
+    engine = markdown.Markdown(extensions=names, extension_configs=configs)
+    return engine.convert(path.read_text(encoding="utf-8"))
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="mkdocs-speech", description=__doc__.split("\n\n")[0])
+    ap.add_argument("docs_dir")
+    ap.add_argument("--config", help="mkdocs.yml whose markdown_extensions render the pages")
+    args = ap.parse_args(argv)
+    directory = Path(args.docs_dir).resolve()
+    config = Path(args.config).resolve() if args.config else find_config(directory)
+    names, configs = load_extensions(config) if config else default_extensions()
+    if config:
+        # Extensions such as snippets resolve relative paths from the config's folder, as mkdocs does.
+        os.chdir(config.parent)
+    for page in sorted(p for p in directory.rglob("*.md") if p.is_file()):
+        sections = speech_of(render(page, names, configs))
+        if not sections:
+            continue
+        sections["_source"] = {"file": page.name, "sha256": sha256_hex(page)}
+        out = page.with_suffix(".speech.json")
+        out.write_text(json.dumps(sections, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"  {out}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
