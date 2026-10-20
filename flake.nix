@@ -33,14 +33,12 @@
         selfTestSmokeHarness = lib.mkLinuxArtifactSmoke { inherit pkgs system; };
         # A product of two commands installed together: one AppImage per
         # command, one DEB and one RPM that put both on the path.
+        helloAgain = pkgs.writeShellScriptBin "hello-again" ''
+          exec ${pkgs.hello}/bin/hello --greeting="Hello again" "$@"
+        '';
         helloPair = pkgs.symlinkJoin {
           name = "hello-pair";
-          paths = [
-            pkgs.hello
-            (pkgs.writeShellScriptBin "hello-again" ''
-              exec ${pkgs.hello}/bin/hello --greeting="Hello again" "$@"
-            '')
-          ];
+          paths = [ pkgs.hello helloAgain ];
           meta.mainProgram = "hello";
         };
         selfTestMulti = lib.mkLinuxArtifacts {
@@ -48,6 +46,8 @@
           executableName = "hello";
           version = "2.12.1";
           commands = [ "hello" "hello-again" ];
+          # hello-again's AppImage carries its own package only
+          commandPackages = { hello-again = helloAgain; };
           glibcPackage = helloPair;
           glibcArtifacts = glibcArtifacts;
         };

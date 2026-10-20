@@ -1,0 +1,59 @@
+name: "Linux install test"
+description: "Install the DEB on Ubuntu and the RPM on Fedora, run each AppImage, on machines without Nix, and run every command"
+
+inputs:
+  artifacts-dir:
+    description: "Directory holding the artifacts (mkLinuxArtifacts output, or a workflow artifact of it)"
+    required: true
+  artifact-version:
+    description: "Artifact version in the file names"
+    required: true
+  executable-name:
+    description: "Name of the executable; names the DEB and RPM"
+    required: true
+  commands:
+    description: "Comma-separated commands of the product (one AppImage each); defaults to executable-name"
+    required: false
+    default: ""
+  smoke-args:
+    description: "Arguments each command runs with (for example --version); default none"
+    required: false
+    default: ""
+  usage-grep:
+    description: "Substring each command's output must contain"
+    required: false
+    default: ""
+  artifacts:
+    description: "Comma-separated subset of appimage,deb,rpm"
+    required: false
+    default: "appimage,deb,rpm"
+  system-suffix:
+    description: "System in the file names"
+    required: false
+    default: "x86_64-linux"
+  ubuntu-image:
+    description: "Image the DEB is installed and the AppImages run on"
+    required: false
+    default: "ubuntu:24.04"
+  fedora-image:
+    description: "Image the RPM is installed on"
+    required: false
+    default: "fedora:41"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install and run every artifact on machines without Nix
+      shell: bash
+      env:
+        INPUT_ARTIFACTS_DIR: ${{ inputs.artifacts-dir }}
+        INPUT_ARTIFACT_VERSION: ${{ inputs.artifact-version }}
+        INPUT_EXECUTABLE_NAME: ${{ inputs.executable-name }}
+        INPUT_COMMANDS: ${{ inputs.commands }}
+        INPUT_SMOKE_ARGS: ${{ inputs.smoke-args }}
+        INPUT_USAGE_GREP: ${{ inputs.usage-grep }}
+        INPUT_ARTIFACTS: ${{ inputs.artifacts }}
+        INPUT_SYSTEM_SUFFIX: ${{ inputs.system-suffix }}
+        INPUT_UBUNTU_IMAGE: ${{ inputs.ubuntu-image }}
+        INPUT_FEDORA_IMAGE: ${{ inputs.fedora-image }}
+      run: bash "${{ github.action_path }}/scripts/install-test.sh"

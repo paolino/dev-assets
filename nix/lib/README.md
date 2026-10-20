@@ -13,6 +13,9 @@ Current exports:
 - `lib.mkMuslTarball` — the static musl tarball half
 - `lib.mkLinuxArtifactSmoke` — runs each built artifact and greps a usage string
 - `lib.mkClosurePackages` — one DEB and one RPM of a package's closure with several commands on the path
+
+The composite action [`linux-install-test`](../../linux-install-test/README.md) installs those
+artifacts on Ubuntu and Fedora machines without Nix and runs every command.
 - `lib.mkDarwinHomebrewBundle` — Darwin tarball + generated Homebrew formula
 
 The library is intentionally small. It provides deterministic artifact builders
@@ -67,7 +70,9 @@ Each command gets its own AppImage (`<command>-<version>-<system>.AppImage`);
 the product gets one DEB and one RPM (`<executableName>-<version>-<system>`)
 built by `mkClosurePackages`: the whole runtime closure under `/nix/store` and
 every command linked into `/usr/bin`, with the build refusing a closure path
-missing from the package. With the default `commands = [ executableName ]` the
+missing from the package. `commandPackages` names, per command, the package
+its AppImage is built from (by default the whole product), so a command that
+needs less than the product ships less. With the default `commands = [ executableName ]` the
 artifacts are the bundlers' own, as before.
 
 The smoke harness takes `--commands a,b,c` for such a product, and

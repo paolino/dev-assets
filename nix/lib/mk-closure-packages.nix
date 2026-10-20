@@ -43,8 +43,11 @@ pkgs.runCommand "${name}-${version}-closure-packages"
   set -euo pipefail
   export HOME="$TMPDIR"
   mkdir -p root/nix/store root/usr/bin "$out"
+  # symbolic links stay links; hard links are not kept: the store links equal
+  # files of different paths together, and dpkg refuses an archive whose hard
+  # links point into another package path it has not unpacked yet
   while IFS= read -r path; do
-    cp -a "$path" root/nix/store/
+    cp -R -P --preserve=mode,timestamps "$path" root/nix/store/
   done < ${closure}/store-paths
   # the store is read-only; the packager writes inside the copied tree
   chmod -R u+w root/nix/store

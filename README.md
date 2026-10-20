@@ -43,8 +43,14 @@ first arm build (one-time), after which it's served from cache.
   on the current runner arch and, in `release` mode on a `v*` tag, uploads them
   to the GitHub release. `mode: dev-linux` (PR/dispatch) builds + smokes without
   publishing.
+- **`linux-release`** also takes `commands` and `smoke-args` for a product of
+  several commands (one AppImage each, one DEB and RPM with all of them).
+- **`linux-install-test`** — installs the DEB on Ubuntu and the RPM on Fedora and
+  runs each AppImage, on machines without Nix, and runs every command.
 - **`darwin-homebrew-release`** — builds the Darwin tarball + Homebrew formula
   and, on a tag, uploads to the release and updates the tap.
+  With `upload-assets: no` it publishes the formula of a tarball the release
+  already carries, after checking the published asset is that tarball.
 
 ## Nix library (`inputs.dev-assets.lib`)
 

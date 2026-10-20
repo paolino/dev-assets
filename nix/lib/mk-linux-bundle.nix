@@ -19,16 +19,19 @@
 , bundlers
 , artifacts ? [ "appimage" "deb" "rpm" ]
 , commands ? [ executableName ]
+  # per command, the package its AppImage is built from (default: the whole
+  # product); a command that needs less than the product ships less
+, commandPackages ? { }
 }:
 let
   lib = pkgs.lib;
   want = name: builtins.elem name artifacts;
   multi = commands != [ executableName ];
   base = "${executableName}-${artifactVersion}-${system}";
-  # the package with one command as its main program, for the AppImage of it
+  # one command as the main program of its package, for the AppImage of it
   withMain = command: pkgs.symlinkJoin {
     name = "${command}-${artifactVersion}";
-    paths = [ package ];
+    paths = [ (commandPackages.${command} or package) ];
     meta.mainProgram = command;
   };
   appImageOf = command: bundlers.bundlers.${system}.toAppImage (withMain command);

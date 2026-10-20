@@ -131,3 +131,31 @@ jobs:
           grep -q 'bin.install_symlink libexec/"bin/hello"' "$prebuilt/hello.rb"
           # the prebuilt tarball is shipped as it is
           tar -tzf "$prebuilt/hello-2.12.1-aarch64-darwin.tar.gz" | grep -q '^hello-2.12.1/bin/hello$'
+
+  linux-install-test:
+    name: Linux packages installed on machines without Nix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./setup-nix
+        with:
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Build the self-test packages
+        run: |
+          nix build -L --out-link single .#self-test
+          nix build -L --out-link multi .#self-test-multi
+      - name: The single-command packages
+        uses: ./linux-install-test
+        with:
+          artifacts-dir: single
+          artifact-version: 2.12.1
+          executable-name: hello
+          usage-grep: Hello
+      - name: The packages of a product of two commands
+        uses: ./linux-install-test
+        with:
+          artifacts-dir: multi
+          artifact-version: 2.12.1
+          executable-name: hello
+          commands: hello,hello-again
+          usage-grep: Hello
