@@ -18,6 +18,8 @@
 , commands ? [ executableName ]
   # per command, the package its AppImage is built from (mk-linux-bundle.nix)
 , commandPackages ? { }
+  # further links in the product DEB and RPM (mk-linux-bundle.nix)
+, packageLinks ? { }
 , glibcArtifacts ? (
     # Symmetric across arches: aarch64 ships DEB/RPM too (NixOS bundlers
     # support them on aarch64-linux). Proven by the arm self-test.
@@ -26,7 +28,7 @@
 }:
 let
   glibc = import ./mk-linux-bundle.nix {
-    inherit pkgs system executableName version artifactVersion bundlers commands commandPackages;
+    inherit pkgs system executableName version artifactVersion bundlers commands commandPackages packageLinks;
     package = glibcPackage;
     artifacts = glibcArtifacts;
   };

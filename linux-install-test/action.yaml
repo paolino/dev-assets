@@ -31,6 +31,10 @@ inputs:
     description: "System in the file names"
     required: false
     default: "x86_64-linux"
+  expect-files:
+    description: "Space-separated absolute paths that must exist after the DEB and the RPM are installed (data the product ships beside its commands)"
+    required: false
+    default: ""
   ubuntu-image:
     description: "Image the DEB is installed and the AppImages run on"
     required: false
@@ -54,6 +58,7 @@ runs:
         INPUT_USAGE_GREP: ${{ inputs.usage-grep }}
         INPUT_ARTIFACTS: ${{ inputs.artifacts }}
         INPUT_SYSTEM_SUFFIX: ${{ inputs.system-suffix }}
+        INPUT_EXPECT_FILES: ${{ inputs.expect-files }}
         INPUT_UBUNTU_IMAGE: ${{ inputs.ubuntu-image }}
         INPUT_FEDORA_IMAGE: ${{ inputs.fedora-image }}
       run: bash "${{ github.action_path }}/scripts/install-test.sh"

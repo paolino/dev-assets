@@ -4,6 +4,10 @@
 # and cannot be installed side by side. A product whose commands are installed
 # together (a CLI, its companion, a local node launcher) uses this instead: one
 # package, every command on the path, nothing outside /nix/store and /usr/bin.
+#
+# `links` adds further links into the package, a path under the package root
+# (for example `usr/share/<name>`) to an absolute path inside the closure: the
+# data a product's users read beside its commands, at a path they can name.
 { pkgs
 , lib ? pkgs.lib
 , name
@@ -11,6 +15,7 @@
 , package
 , commands
 , formats ? [ "deb" "rpm" ]
+, links ? { }
 }:
 let
   closure = pkgs.closureInfo { rootPaths = [ package ]; };
@@ -24,6 +29,16 @@ let
       ln -s ${lib.escapeShellArg "${package}/bin/${command}"} root/usr/bin/${lib.escapeShellArg command}
     '')
     commands;
+  linkData = lib.concatStringsSep "\n" (lib.mapAttrsToList
+    (path: target: ''
+      [ -e root${lib.escapeShellArg target} ] || {
+        echo ${lib.escapeShellArg "mk-closure-packages: the link target ${target} of ${path} is not in the package closure"} >&2
+        exit 1
+      }
+      mkdir -p "root/$(dirname ${lib.escapeShellArg path})"
+      ln -s ${lib.escapeShellArg target} root/${lib.escapeShellArg path}
+    '')
+    links);
   fpmCommon = "-s dir -n ${lib.escapeShellArg name} -v ${lib.escapeShellArg version} -C root";
 in
 assert commands != [ ];
@@ -38,7 +53,7 @@ pkgs.runCommand "${name}-${version}-closure-packages"
       pkgs.gnutar
       pkgs.gzip
     ];
-    passthru = { inherit closure commands; };
+    passthru = { inherit closure commands links; };
   } ''
   set -euo pipefail
   export HOME="$TMPDIR"
@@ -52,6 +67,7 @@ pkgs.runCommand "${name}-${version}-closure-packages"
   # the store is read-only; the packager writes inside the copied tree
   chmod -R u+w root/nix/store
   ${linkCommands}
+  ${linkData}
   # every path of the closure is in the package: nothing is read from a store
   # the target machine does not have
   while IFS= read -r path; do

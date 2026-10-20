@@ -44,6 +44,11 @@ INNER
 chmod +x "$work/run-commands.sh"
 
 IFS=',' read -ra wanted_commands <<< "$commands"
+# files the package must have put in place, beside its commands
+expect_check=""
+for path in ${INPUT_EXPECT_FILES:-}; do
+  expect_check="$expect_check [ -e '$path' ] || { echo 'missing after the install: $path' >&2; exit 1; };"
+done
 artifacts="${INPUT_ARTIFACTS:-appimage,deb,rpm}"
 IFS=',' read -ra wanted <<< "$artifacts"
 on_path=()
@@ -59,6 +64,7 @@ for artifact in "${wanted[@]}"; do
         set -euo pipefail
         [ ! -e /nix ] || { echo 'the image already has /nix' >&2; exit 1; }
         apt-get install -y -q /artifacts/$base.deb > /tmp/apt.log 2>&1 || { tail -n 20 /tmp/apt.log >&2; exit 1; }
+        $expect_check
         /test/run-commands.sh ${on_path[*]}
       " || fail "the DEB does not install and run on $ubuntu"
       echo "linux-install-test: deb installed on $ubuntu; ${commands} run"
@@ -69,6 +75,7 @@ for artifact in "${wanted[@]}"; do
         set -euo pipefail
         [ ! -e /nix ] || { echo 'the image already has /nix' >&2; exit 1; }
         rpm -i /artifacts/$base.rpm
+        $expect_check
         /test/run-commands.sh ${on_path[*]}
       " || fail "the RPM does not install and run on $fedora"
       echo "linux-install-test: rpm installed on $fedora; ${commands} run"

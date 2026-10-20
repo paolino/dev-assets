@@ -48,6 +48,8 @@
           commands = [ "hello" "hello-again" ];
           # hello-again's AppImage carries its own package only
           commandPackages = { hello-again = helloAgain; };
+          # data beside the commands, at a path its users can name
+          packageLinks = { "usr/share/hello-pair" = "${pkgs.hello}/share"; };
           glibcPackage = helloPair;
           glibcArtifacts = glibcArtifacts;
         };
@@ -75,6 +77,7 @@
             listing="$(dpkg-deb -c ${selfTestMulti}/hello-2.12.1-${system}.deb)"
             grep -q "./usr/bin/hello ->" <<<"$listing"
             grep -q "./usr/bin/hello-again ->" <<<"$listing"
+            grep -q "./usr/share/hello-pair ->" <<<"$listing"
             grep -q "glibc" <<<"$listing"
             # a control: a command the package does not carry is refused
             if linux-artifact-smoke --artifacts-dir ${selfTestMulti} --artifact-version 2.12.1 \

@@ -22,6 +22,9 @@
   # per command, the package its AppImage is built from (default: the whole
   # product); a command that needs less than the product ships less
 , commandPackages ? { }
+  # further links in the product DEB and RPM (mk-closure-packages.nix links),
+  # for example the data its users read beside the commands
+, packageLinks ? { }
 }:
 let
   lib = pkgs.lib;
@@ -40,6 +43,7 @@ let
   rpm = bundlers.bundlers.${system}.toRPM package;
   closurePackages = import ./mk-closure-packages.nix {
     inherit pkgs package commands;
+    links = packageLinks;
     name = executableName;
     version = artifactVersion;
     formats = builtins.filter want [ "deb" "rpm" ];
@@ -71,6 +75,8 @@ let
     ''}
   '';
 in
+assert lib.assertMsg (packageLinks == { } || multi)
+  "packageLinks needs several commands: the bundlers' single-program packages take no links";
 pkgs.runCommand "${executableName}-${artifactVersion}-${system}-glibc-artifacts"
   {
     nativeBuildInputs = [ pkgs.coreutils pkgs.findutils ];

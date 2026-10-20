@@ -159,3 +159,17 @@ jobs:
           executable-name: hello
           commands: hello,hello-again
           usage-grep: Hello
+          expect-files: /usr/share/hello-pair/man/man1/hello.1.gz
+      - name: A file the package does not carry is refused
+        id: missing-file
+        continue-on-error: true
+        uses: ./linux-install-test
+        with:
+          artifacts-dir: multi
+          artifact-version: 2.12.1
+          executable-name: hello
+          commands: hello,hello-again
+          artifacts: deb
+          expect-files: /usr/share/hello-pair/absent
+      - name: The refusal happened
+        run: test "${{ steps.missing-file.outcome }}" = failure

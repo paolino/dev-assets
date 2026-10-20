@@ -72,7 +72,9 @@ built by `mkClosurePackages`: the whole runtime closure under `/nix/store` and
 every command linked into `/usr/bin`, with the build refusing a closure path
 missing from the package. `commandPackages` names, per command, the package
 its AppImage is built from (by default the whole product), so a command that
-needs less than the product ships less. With the default `commands = [ executableName ]` the
+needs less than the product ships less. `packageLinks` adds links to the DEB and the RPM, a
+path under the package root to a path in the closure, for the data users read
+beside the commands (for example `{ "usr/share/<name>" = "${product}/share/<name>"; }`). With the default `commands = [ executableName ]` the
 artifacts are the bundlers' own, as before.
 
 The smoke harness takes `--commands a,b,c` for such a product, and

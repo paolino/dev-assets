@@ -33,5 +33,8 @@ The runner needs Docker (GitHub's hosted Ubuntu runners have it):
     usage-grep: "my-tool 1.2.3"
 ```
 
+`expect-files` lists absolute paths that must exist after the DEB and the RPM
+are installed, for the data a product ships beside its commands.
+
 `artifacts` takes a subset of `appimage,deb,rpm`; `system-suffix`,
 `ubuntu-image` and `fedora-image` override the defaults.
