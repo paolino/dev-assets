@@ -55,11 +55,16 @@ nix build --quiet --print-out-paths \
 
 artifact_dir="$(readlink -f "$out_link")"
 
-nix run --quiet ".#${smoke_app}" -- \
-  --artifacts-dir "$artifact_dir" \
-  --artifact-version "$artifact_version" \
-  --executable-name "$exe" \
+smoke=(
+  --artifacts-dir "$artifact_dir"
+  --artifact-version "$artifact_version"
+  --executable-name "$exe"
   --usage-grep "$usage_grep"
+)
+# a product of several commands, and commands smoked with arguments
+if [ -n "${INPUT_COMMANDS:-}" ]; then smoke+=(--commands "$INPUT_COMMANDS"); fi
+if [ -n "${INPUT_SMOKE_ARGS:-}" ]; then smoke+=(--smoke-args "$INPUT_SMOKE_ARGS"); fi
+nix run --quiet ".#${smoke_app}" -- "${smoke[@]}"
 
 rm -rf artifacts
 mkdir -p artifacts

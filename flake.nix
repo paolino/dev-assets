@@ -14,7 +14,8 @@
     let
       lib = import ./nix/lib;
     in
-    { inherit lib; }
+    nixpkgs.lib.recursiveUpdate
+    ({ inherit lib; }
     // flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -30,6 +31,60 @@
           glibcArtifacts = glibcArtifacts;
         };
         selfTestSmokeHarness = lib.mkLinuxArtifactSmoke { inherit pkgs system; };
+        # A product of two commands installed together: one AppImage per
+        # command, one DEB and one RPM that put both on the path.
+        helloPair = pkgs.symlinkJoin {
+          name = "hello-pair";
+          paths = [
+            pkgs.hello
+            (pkgs.writeShellScriptBin "hello-again" ''
+              exec ${pkgs.hello}/bin/hello --greeting="Hello again" "$@"
+            '')
+          ];
+          meta.mainProgram = "hello";
+        };
+        selfTestMulti = lib.mkLinuxArtifacts {
+          inherit pkgs system bundlers;
+          executableName = "hello";
+          version = "2.12.1";
+          commands = [ "hello" "hello-again" ];
+          glibcPackage = helloPair;
+          glibcArtifacts = glibcArtifacts;
+        };
+        selfTestMultiSmoke = pkgs.writeShellApplication {
+          name = "self-test-multi-smoke";
+          runtimeInputs = [ selfTestSmokeHarness pkgs.coreutils pkgs.dpkg pkgs.gnugrep ];
+          text = ''
+            linux-artifact-smoke \
+              --artifacts-dir ${selfTestMulti} \
+              --artifact-version 2.12.1 \
+              --executable-name hello \
+              --commands hello,hello-again \
+              --artifacts appimage,deb,rpm \
+              --usage-grep "Hello"
+            # arguments instead of none
+            linux-artifact-smoke \
+              --artifacts-dir ${selfTestMulti} \
+              --artifact-version 2.12.1 \
+              --executable-name hello \
+              --commands hello,hello-again \
+              --artifacts appimage,deb,rpm \
+              --smoke-args "--version" \
+              --usage-grep "GNU Hello"
+            # one DEB, both commands on the path, and the whole closure inside
+            listing="$(dpkg-deb -c ${selfTestMulti}/hello-2.12.1-${system}.deb)"
+            grep -q "./usr/bin/hello ->" <<<"$listing"
+            grep -q "./usr/bin/hello-again ->" <<<"$listing"
+            grep -q "glibc" <<<"$listing"
+            # a control: a command the package does not carry is refused
+            if linux-artifact-smoke --artifacts-dir ${selfTestMulti} --artifact-version 2.12.1 \
+              --executable-name hello --commands hello,absent --artifacts appimage >/dev/null 2>&1; then
+              echo "self-test-multi-smoke: a missing command passed" >&2
+              exit 1
+            fi
+            echo "self-test-multi-smoke: OK"
+          '';
+        };
         selfTestSmoke = pkgs.writeShellApplication {
           name = "self-test-smoke";
           runtimeInputs = [ selfTestSmokeHarness ];
@@ -45,10 +100,41 @@
       {
         packages.self-test = selfTest;
         packages.self-test-smoke = selfTestSmoke;
+        packages.self-test-multi = selfTestMulti;
+        packages.self-test-multi-smoke = selfTestMultiSmoke;
         packages.graph-easy = pkgs.graph-easy;
         apps.graph-easy = flake-utils.lib.mkApp {
           drv = pkgs.graph-easy;
           exePath = "/bin/graph-easy";
         };
-      });
+      }))
+    # The macOS Homebrew helper, both ways: the commands it bundles itself, and
+    # a tarball the caller assembled (one top directory, its commands in bin/).
+    {
+      packages.aarch64-darwin =
+        let
+          pkgs = nixpkgs.legacyPackages.aarch64-darwin;
+          mk = lib.mkDarwinHomebrewBundle { inherit pkgs; };
+          common = {
+            pname = "hello";
+            version = "2.12.1";
+            owner = "paolino";
+            repo = "dev-assets";
+            desc = "Self-test of the Homebrew helper";
+            formulaClass = "Hello";
+            executableNames = [ "hello" ];
+            smokeCommands = [ "hello --version" ];
+          };
+          helloTarball = pkgs.runCommand "hello-prebuilt.tar.gz"
+            { nativeBuildInputs = [ pkgs.gnutar pkgs.gzip ]; } ''
+            mkdir -p hello-2.12.1/bin
+            cp ${pkgs.hello}/bin/hello hello-2.12.1/bin/hello
+            tar -czf "$out" hello-2.12.1
+          '';
+        in
+        {
+          darwin-self-test = mk (common // { executables = { hello = pkgs.hello; }; });
+          darwin-self-test-prebuilt = mk (common // { bundleTarball = helloTarball; });
+        };
+    };
 }

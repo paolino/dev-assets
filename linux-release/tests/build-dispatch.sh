@@ -190,6 +190,33 @@ grep -q '^artifact_name=linux-dev-release-bundles-foo$' "$out2" \
   || { echo "dev-linux: artifact_name wrong" >&2; cat "$out2" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
+# Case 2b: a product of several commands, smoked with arguments: both options
+# reach the smoke app; without them the smoke call names neither.
+# ---------------------------------------------------------------------------
+grep -q -- "--commands" "$NIX_SHIM_LOG" \
+  && { echo "default: the smoke call named --commands" >&2; cat "$NIX_SHIM_LOG" >&2; exit 1; }
+: >"$NIX_SHIM_LOG"
+out2b="$tmp/github-output.commands"
+: >"$out2b"
+run_build "$out2b" "$tmp/commands.log" \
+  INPUT_MODE=dev-linux \
+  INPUT_TAG=ignored \
+  INPUT_EXECUTABLE_NAME=foo \
+  INPUT_USAGE_GREP="(commit " \
+  INPUT_COMMANDS=foo,foo-node \
+  INPUT_SMOKE_ARGS=--version \
+  INPUT_RELEASE_OUTPUT=foo-linux-release-artifacts \
+  INPUT_DEV_OUTPUT=foo-linux-dev-release-artifacts \
+  INPUT_RELEASE_VERSION_COMMAND='echo 0.0.1' \
+  INPUT_ARTIFACT_NAME_PREFIX=linux-release-bundles \
+  INPUT_DEV_ARTIFACT_NAME_PREFIX=linux-dev-release-bundles \
+  INPUT_SMOKE_APP=linux-artifact-smoke
+grep -qF -- "--commands foo\\,foo-node" "$NIX_SHIM_LOG" \
+  || { echo "commands: --commands did not reach the smoke app" >&2; cat "$NIX_SHIM_LOG" >&2; exit 1; }
+grep -q -- "--smoke-args --version" "$NIX_SHIM_LOG" \
+  || { echo "commands: --smoke-args did not reach the smoke app" >&2; cat "$NIX_SHIM_LOG" >&2; exit 1; }
+
+# ---------------------------------------------------------------------------
 # Case 3: input validation error paths.
 # ---------------------------------------------------------------------------
 expect_fail() {

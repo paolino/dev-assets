@@ -60,6 +60,17 @@ The tarball must unpack into a bundle with executable commands under `bin/`.
 The action verifies every command listed in `installed-commands` exists and is
 executable before running any caller-provided smoke script.
 
+## A tarball the release already carries
+
+A repository whose own release job publishes the macOS tarball (for example
+with one `SHA256SUMS` over every asset) builds its formula with
+`mkDarwinHomebrewBundle { bundleTarball = ...; }` from that same tarball and sets
+`upload-assets: no`. In release mode with `publish: yes` the action then uploads
+nothing: it downloads the release's asset of the tarball's name, requires it to
+be byte for byte the tarball the formula's checksum was computed from, and only
+then updates the tap and installs from it. The tarball smoke accepts the
+commands in `bin/` of the tarball's one top directory as well as at its top.
+
 ## Mode Matrix
 
 | Event / mode | Builds artifacts | Tarball smoke | Local tap formula test | Upload workflow artifact | GitHub release upload | Tap update | Tap install test |

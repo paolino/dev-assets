@@ -92,6 +92,10 @@ inputs:
     description: "GitHub release title for dev Homebrew mode"
     required: false
     default: ""
+  upload-assets:
+    description: "Release mode with publish: upload the tarball to the GitHub release. no when the caller's own release job already published that tarball; the action then checks the published asset is the one the formula names"
+    required: false
+    default: "yes"
   upload-artifact:
     description: "Upload the generated tarball and formula as a workflow artifact"
     required: false
@@ -172,7 +176,7 @@ runs:
         retention-days: ${{ inputs.retention-days }}
 
     - name: Create release and upload artifact
-      if: ${{ inputs.mode == 'release' && (inputs.publish == 'yes' || inputs.publish == 'true') }}
+      if: ${{ inputs.mode == 'release' && (inputs.publish == 'yes' || inputs.publish == 'true') && inputs.upload-assets != 'no' && inputs.upload-assets != 'false' }}
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
@@ -183,6 +187,17 @@ runs:
         INPUT_RELEASE_TITLE: ${{ inputs.release-title }}
         GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
       run: bash "$ACTION_PATH/scripts/publish-release.sh"
+
+    - name: Check the published tarball is the one the formula names
+      if: ${{ inputs.mode == 'release' && (inputs.publish == 'yes' || inputs.publish == 'true') && (inputs.upload-assets == 'no' || inputs.upload-assets == 'false') }}
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        INPUT_TAG: ${{ inputs.tag }}
+        INPUT_TARBALL: ${{ steps.build.outputs.tarball }}
+        INPUT_ASSET: ${{ steps.build.outputs.asset }}
+      run: bash "$ACTION_PATH/scripts/check-published-asset.sh"
 
     - name: Update homebrew tap
       if: ${{ inputs.mode == 'release' && (inputs.publish == 'yes' || inputs.publish == 'true') }}

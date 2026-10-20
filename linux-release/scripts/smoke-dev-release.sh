@@ -14,13 +14,24 @@ fi
 
 download_dir="$(mktemp -d)"
 gh=(nix --quiet shell nixpkgs#gh -c gh)
+# every command of the product has its own AppImage; the packages carry the
+# product name
+patterns=(--pattern "$exe-$artifact_version-x86_64-linux.*")
+IFS=, read -ra commands <<< "${INPUT_COMMANDS:-}"
+for command in "${commands[@]}"; do
+  [ "$command" = "$exe" ] || patterns+=(--pattern "$command-$artifact_version-x86_64-linux.*")
+done
 "${gh[@]}" release download "$dev_tag" \
   --dir "$download_dir" \
-  --pattern "$exe-$artifact_version-x86_64-linux.*" \
+  "${patterns[@]}" \
   --clobber
 ls -lh "$download_dir"
-nix run --quiet ".#$smoke_app" -- \
-  --artifacts-dir "$download_dir" \
-  --artifact-version "$artifact_version" \
-  --executable-name "$exe" \
+smoke=(
+  --artifacts-dir "$download_dir"
+  --artifact-version "$artifact_version"
+  --executable-name "$exe"
   --usage-grep "$usage_grep"
+)
+if [ -n "${INPUT_COMMANDS:-}" ]; then smoke+=(--commands "$INPUT_COMMANDS"); fi
+if [ -n "${INPUT_SMOKE_ARGS:-}" ]; then smoke+=(--smoke-args "$INPUT_SMOKE_ARGS"); fi
+nix run --quiet ".#$smoke_app" -- "${smoke[@]}"

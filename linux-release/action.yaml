@@ -63,6 +63,14 @@ inputs:
     description: "Workflow artifact retention days"
     required: false
     default: "30"
+  commands:
+    description: "Comma-separated commands of the product to smoke (one AppImage each, one DEB and RPM for all); defaults to executable-name"
+    required: false
+    default: ""
+  smoke-args:
+    description: "Arguments each command is smoked with, instead of none (for example --version)"
+    required: false
+    default: ""
   smoke-app:
     description: "Flake app name for the Linux artifact smoke harness"
     required: false
@@ -97,6 +105,8 @@ runs:
         INPUT_DEV_OUTPUT: ${{ inputs.dev-output }}
         INPUT_EXECUTABLE_NAME: ${{ inputs.executable-name }}
         INPUT_USAGE_GREP: ${{ inputs.usage-grep }}
+        INPUT_COMMANDS: ${{ inputs.commands }}
+        INPUT_SMOKE_ARGS: ${{ inputs.smoke-args }}
         INPUT_RELEASE_VERSION_COMMAND: ${{ inputs.release-version-command }}
         INPUT_RELEASE_CHECK_COMMAND: ${{ inputs.release-check-command }}
         INPUT_ARTIFACT_NAME_PREFIX: ${{ inputs.artifact-name-prefix }}
@@ -148,5 +158,7 @@ runs:
         INPUT_EXECUTABLE_NAME: ${{ inputs.executable-name }}
         INPUT_USAGE_GREP: ${{ inputs.usage-grep }}
         INPUT_ARTIFACT_VERSION: ${{ steps.build.outputs.artifact_version }}
+        INPUT_COMMANDS: ${{ inputs.commands }}
+        INPUT_SMOKE_ARGS: ${{ inputs.smoke-args }}
         INPUT_SMOKE_APP: ${{ inputs.smoke-app }}
       run: bash "$ACTION_PATH/scripts/smoke-dev-release.sh"

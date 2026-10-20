@@ -13,6 +13,9 @@
 , glibcPackage
 , muslPackage ? null
 , bundlers
+  # the commands a user installs from this package (mk-linux-bundle.nix); the
+  # musl tarball, when asked for, stays the one of executableName
+, commands ? [ executableName ]
 , glibcArtifacts ? (
     # Symmetric across arches: aarch64 ships DEB/RPM too (NixOS bundlers
     # support them on aarch64-linux). Proven by the arm self-test.
@@ -21,7 +24,7 @@
 }:
 let
   glibc = import ./mk-linux-bundle.nix {
-    inherit pkgs system executableName version artifactVersion bundlers;
+    inherit pkgs system executableName version artifactVersion bundlers commands;
     package = glibcPackage;
     artifacts = glibcArtifacts;
   };

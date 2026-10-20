@@ -1,8 +1,17 @@
 # Generalized Linux artifact smoke harness. Extracts each artifact from its
 # packaged form and runs the executable, requiring an optional substring in its
-# combined (stdout+stderr) no-args output. The artifact set defaults to the full
+# combined (stdout+stderr) output. The artifact set defaults to the full
 # symmetric matrix (AppImage/DEB/RPM/musl on both arches) and can be overridden
 # with --artifacts.
+#
+# The program run is the one the artifact itself names: the AppImage's
+# `entrypoint`, the package's `usr/bin/<command>` or `bin/<command>` link,
+# followed inside the extracted tree. A search by file name is only the
+# fallback, because a closure can hold two files of one name (a wrapper and the
+# program it wraps). `--commands` smokes several commands of one product (one
+# AppImage per command, one DEB and one RPM for all; see mk-linux-bundle.nix),
+# and `--smoke-args` runs each with arguments instead of none, for a program
+# whose no-argument run does something else than print its usage.
 { pkgs
 , system
 , artifacts ? [ "appimage" "deb" "rpm" "musl" ]
@@ -34,8 +43,10 @@ pkgs.writeShellApplication {
         [--system-suffix SYSTEM]
         [--usage-grep STRING]
         [--artifacts a,b,c]   (subset of: appimage,deb,rpm,musl)
+        [--commands a,b,c]    (the product's commands; default: NAME)
+        [--smoke-args "ARGS"] (arguments each command runs with; default: none)
 
-    Extracts each artifact and runs NAME, requiring its combined no-args
+    Extracts each artifact and runs each command, requiring its combined
     output to contain --usage-grep (when given).
     USAGE
     }
@@ -46,6 +57,8 @@ pkgs.writeShellApplication {
     executable_name=""
     usage_grep=""
     artifacts="${defaultArtifacts}"
+    commands=""
+    smoke_args=""
 
     while [ "$#" -gt 0 ]; do
       case "$1" in
@@ -55,6 +68,8 @@ pkgs.writeShellApplication {
         --executable-name) executable_name="$2"; shift 2;;
         --usage-grep) usage_grep="$2"; shift 2;;
         --artifacts) artifacts="$2"; shift 2;;
+        --commands) commands="$2"; shift 2;;
+        --smoke-args) smoke_args="$2"; shift 2;;
         -h|--help) usage; exit 0;;
         *) echo "unknown option: $1" >&2; usage >&2; exit 2;;
       esac
@@ -64,6 +79,9 @@ pkgs.writeShellApplication {
       usage >&2
       exit 2
     fi
+    [ -n "$commands" ] || commands="$executable_name"
+    IFS=',' read -ra wanted_commands <<< "$commands"
+    read -ra args <<< "$smoke_args"
 
     artifacts_dir="$(cd "$artifacts_dir" && pwd)"
     workdir="$(mktemp -d)"
@@ -71,10 +89,39 @@ pkgs.writeShellApplication {
 
     base="$executable_name-$artifact_version-$system_suffix"
 
+    # resolve ROOT PATH: follow PATH while it is a link, an absolute target
+    # read inside ROOT (the extracted tree stands for the store)
+    resolve() {
+      local root="$1" path="$2" target hops=0
+      while [ -L "$path" ] && [ "$hops" -lt 40 ]; do
+        target="$(readlink "$path")"
+        case "$target" in
+          /*) path="$root$target" ;;
+          *) path="$(dirname "$path")/$target" ;;
+        esac
+        hops=$((hops + 1))
+      done
+      printf '%s' "$path"
+    }
+
+    # program_in ROOT COMMAND [LINK...]: the file the first existing LINK names,
+    # or the fallback search by name
+    program_in() {
+      local root="$1" command="$2" link
+      shift 2
+      for link in "$@"; do
+        if [ -e "$link" ] || [ -L "$link" ]; then
+          resolve "$root" "$link"
+          return
+        fi
+      done
+      find "$root" -name "$command" -type f -executable | head -1
+    }
+
     smoke_cli() {
       bin="$1"
       test -x "$bin"
-      output="$("$bin" 2>&1 || true)"
+      output="$("$bin" ''${args[@]+"''${args[@]}"} 2>&1 || true)"
       printf '%s\n' "$output"
       if [ -n "$usage_grep" ]; then
         grep -F -- "$usage_grep" <<<"$output" >/dev/null
@@ -82,14 +129,23 @@ pkgs.writeShellApplication {
     }
 
     smoke_appimage() {
-      appimage="$artifacts_dir/$base.AppImage"
-      test -f "$appimage"
-      dir="$workdir/appimage"
-      mkdir -p "$dir"
-      cp -L "$appimage" "$dir/$executable_name.AppImage"
-      chmod +x "$dir/$executable_name.AppImage"
-      ( cd "$dir" && "./$executable_name.AppImage" --appimage-extract >/dev/null )
-      smoke_cli "$(find "$dir" -name "$executable_name" -type f -executable | head -1)"
+      for command in "''${wanted_commands[@]}"; do
+        appimage="$artifacts_dir/$command-$artifact_version-$system_suffix.AppImage"
+        test -f "$appimage"
+        dir="$workdir/appimage-$command"
+        mkdir -p "$dir"
+        cp -L "$appimage" "$dir/$command.AppImage"
+        chmod +x "$dir/$command.AppImage"
+        ( cd "$dir" && "./$command.AppImage" --appimage-extract >/dev/null )
+        smoke_cli "$(program_in "$dir/squashfs-root" "$command" "$dir/squashfs-root/entrypoint")"
+      done
+    }
+
+    smoke_package() {
+      dir="$1"
+      for command in "''${wanted_commands[@]}"; do
+        smoke_cli "$(program_in "$dir" "$command" "$dir/usr/bin/$command" "$dir/bin/$command")"
+      done
     }
 
     smoke_deb() {
@@ -98,7 +154,7 @@ pkgs.writeShellApplication {
       dir="$workdir/deb"
       mkdir -p "$dir"
       dpkg-deb -x "$deb" "$dir"
-      smoke_cli "$(find "$dir" -name "$executable_name" -type f -executable | head -1)"
+      smoke_package "$dir"
     }
 
     smoke_rpm() {
@@ -107,7 +163,7 @@ pkgs.writeShellApplication {
       dir="$workdir/rpm"
       mkdir -p "$dir"
       ( cd "$dir" && rpm2cpio "$rpm" | cpio -idm >/dev/null 2>&1 )
-      smoke_cli "$(find "$dir" -name "$executable_name" -type f -executable | head -1)"
+      smoke_package "$dir"
     }
 
     smoke_musl() {
@@ -139,6 +195,6 @@ pkgs.writeShellApplication {
       esac
     done
 
-    echo "linux-artifact-smoke: OK ($artifacts)"
+    echo "linux-artifact-smoke: OK ($artifacts; $commands)"
   '';
 }

@@ -12,6 +12,7 @@ Current exports:
 - `lib.mkLinuxBundle` — the glibc AppImage/DEB/RPM half
 - `lib.mkMuslTarball` — the static musl tarball half
 - `lib.mkLinuxArtifactSmoke` — runs each built artifact and greps a usage string
+- `lib.mkClosurePackages` — one DEB and one RPM of a package's closure with several commands on the path
 - `lib.mkDarwinHomebrewBundle` — Darwin tarball + generated Homebrew formula
 
 The library is intentionally small. It provides deterministic artifact builders
@@ -44,6 +45,37 @@ It composes `mkLinuxBundle` (glibc AppImage/DEB/RPM via the NixOS bundlers) and
 artifact and greps a usage string; override `--usage-grep` when the executable
 does not print the default `Usage:` token (e.g. an optparse-applicative tool
 that prints `Missing:` on no args, or needs `--help`).
+
+### A product of several commands
+
+The bundlers package one program per DEB or RPM, and two packages built from
+one product carry the same store paths, so they cannot be installed side by
+side. A product whose commands are installed together passes them all:
+
+```nix
+linux-release-artifacts = inputs.dev-assets.lib.mkLinuxArtifacts {
+  inherit pkgs system;
+  executableName = "singular";                    # names the DEB and RPM
+  commands = [ "singular" "open-datum" "devnet" ]; # every one on the path
+  version = packageVersion;
+  glibcPackage = product;                         # bin/ holds every command
+  bundlers = inputs.bundlers;
+};
+```
+
+Each command gets its own AppImage (`<command>-<version>-<system>.AppImage`);
+the product gets one DEB and one RPM (`<executableName>-<version>-<system>`)
+built by `mkClosurePackages`: the whole runtime closure under `/nix/store` and
+every command linked into `/usr/bin`, with the build refusing a closure path
+missing from the package. With the default `commands = [ executableName ]` the
+artifacts are the bundlers' own, as before.
+
+The smoke harness takes `--commands a,b,c` for such a product, and
+`--smoke-args "ARGS"` to run each command with arguments (for example
+`--version`) instead of none, for a program whose no-argument run starts
+something rather than printing its usage. The program it runs is the one the
+artifact names (the AppImage's `entrypoint`, the package's `usr/bin` or `bin`
+link), followed inside the extracted tree.
 
 ## mkDarwinHomebrewBundle
 
@@ -174,6 +206,7 @@ The tarball unpacks to:
 | `formulaExtraLines` | empty | no | Extra Ruby lines inserted after the `version` line, for example `conflicts_with`. |
 | `formulaTest` | executable assertions | no | Ruby body inserted inside `test do`. |
 | `smokeCommands` | first executable `--help` | no | Shell commands run against the bundled `bin/` before the tarball is created. |
+| `bundleTarball` | `null` | no | An already assembled, relocatable tarball with one top directory holding `bin/<name>` for every entry of `executableNames` (launchers, libraries and data as the product needs). It is smoke-tested unpacked and shipped byte for byte as the release tarball; the formula installs the whole folder under `libexec` and links the commands into `bin`. `executables` is then not needed. |
 
 ## Release and Development Outputs
 

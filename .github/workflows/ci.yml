@@ -100,3 +100,34 @@ jobs:
         run: nix build -L .#self-test
       - name: Smoke every artifact from its extracted form
         run: nix run .#self-test-smoke
+      - name: Build and smoke the artifacts of a product of several commands
+        run: |
+          nix build -L .#self-test-multi
+          nix run .#self-test-multi-smoke
+
+  darwin-homebrew-release-test:
+    name: darwin-homebrew-release script test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run the tarball smoke and published-asset check on synthetic inputs
+        run: bash darwin-homebrew-release/tests/scripts.sh
+
+  darwin-lib-self-test:
+    name: lib self-test (aarch64-darwin)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./setup-nix
+        with:
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Build the Homebrew helper both ways
+        run: |
+          own="$(nix build -L --no-link --print-out-paths .#packages.aarch64-darwin.darwin-self-test)"
+          prebuilt="$(nix build -L --no-link --print-out-paths .#packages.aarch64-darwin.darwin-self-test-prebuilt)"
+          ls -l "$own" "$prebuilt"
+          grep -q 'bin.install "bin/hello"' "$own/hello.rb"
+          grep -q 'libexec.install Dir\["\*"\]' "$prebuilt/hello.rb"
+          grep -q 'bin.install_symlink libexec/"bin/hello"' "$prebuilt/hello.rb"
+          # the prebuilt tarball is shipped as it is
+          tar -tzf "$prebuilt/hello-2.12.1-aarch64-darwin.tar.gz" | grep -q '^hello-2.12.1/bin/hello$'

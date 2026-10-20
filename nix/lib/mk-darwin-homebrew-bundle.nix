@@ -3,7 +3,15 @@
 }:
 { pname
 , version
-, executables
+  # the commands, each at ${drv}/bin/<name>; the helper bundles them and their
+  # dylibs itself. Not needed when bundleTarball is given.
+, executables ? { }
+  # an already assembled, relocatable tarball with one top directory holding
+  # bin/<name> for every name in executableNames (launchers, libraries, data:
+  # whatever the product needs). It becomes the release tarball byte for byte,
+  # and the formula installs the whole folder under libexec and links the
+  # commands into bin.
+, bundleTarball ? null
 , owner
 , repo ? pname
 , executableNames ? builtins.attrNames executables
@@ -40,8 +48,67 @@ let
   bundleSmokeCommands = lib.concatMapStringsSep "\n"
     (command: "    ${command}")
     smokeCommands;
+  prebuilt = bundleTarball != null;
+  formulaInstallLines =
+    if prebuilt then [
+      ''libexec.install Dir["*"]''
+      "bin.install_symlink ${lib.concatMapStringsSep ", " (name: "libexec/${rubyString "bin/${name}"}") executableNames}"
+    ]
+    else [
+      "bin.install ${binInstallArgs}"
+      ''(libexec/"lib").install Dir["libexec/lib/*"]''
+    ];
+  formulaInstall = lib.concatMapStringsSep "\n" (line: "    ${line}") formulaInstallLines;
+  checkPrebuiltCommands = lib.concatMapStringsSep "\n"
+    (name: ''test -x "$top/bin/${name}" || { echo ${lib.escapeShellArg "bundleTarball has no bin/${name}"} >&2; exit 1; }'')
+    executableNames;
+  # the helper's own bundle: the commands and their dylibs, load paths rewritten
+  assembledSteps = ''
+    ${copyExecutableCommands}
+
+    while [ -s "$queue" ]; do
+      lib="$(head -n 1 "$queue")"
+      tail -n +2 "$queue" > "$queue.next"
+      mv "$queue.next" "$queue"
+      copy_dylib "$lib"
+    done
+
+    export PATH="$bundle/bin:$PATH"
+${bundleSmokeCommands}
+
+    tarball="$out/${artifactName}"
+    tar --sort=name \
+      --mtime='@1' \
+      --owner=0 \
+      --group=0 \
+      --numeric-owner \
+      -cf - \
+      -C "$bundle" . \
+      | gzip -n > "$tarball"
+  '';
+  # the tarball the caller assembled: one top directory with every command in
+  # bin/, smoke-tested from its unpacked form, then shipped as it is
+  prebuiltSteps = ''
+    unpacked="$TMPDIR/unpacked"
+    mkdir -p "$unpacked"
+    tar -xzf ${bundleTarball} -C "$unpacked"
+    top="$(find "$unpacked" -mindepth 1 -maxdepth 1)"
+    if [ "$(printf '%s\n' "$top" | wc -l | tr -d ' ')" -ne 1 ] || [ ! -d "$top" ]; then
+      echo "bundleTarball must hold exactly one top directory, it holds: $top" >&2
+      exit 1
+    fi
+    ${checkPrebuiltCommands}
+    export PATH="$top/bin:$PATH"
+${bundleSmokeCommands}
+
+    tarball="$out/${artifactName}"
+    cp ${bundleTarball} "$tarball"
+    chmod u+w "$tarball"
+  '';
 in
 assert pkgs.stdenv.isDarwin;
+assert prebuilt || executables != { };
+assert executableNames != [ ];
 pkgs.runCommand "${formulaName}-${artifactVersion}-${system}-artifacts"
   {
     nativeBuildInputs = [
@@ -140,27 +207,7 @@ pkgs.runCommand "${formulaName}-${artifactVersion}-${system}-artifacts"
       patch_loads "$target" "@loader_path" "$lib"
     }
 
-    ${copyExecutableCommands}
-
-    while [ -s "$queue" ]; do
-      lib="$(head -n 1 "$queue")"
-      tail -n +2 "$queue" > "$queue.next"
-      mv "$queue.next" "$queue"
-      copy_dylib "$lib"
-    done
-
-    export PATH="$bundle/bin:$PATH"
-${bundleSmokeCommands}
-
-    tarball="$out/${artifactName}"
-    tar --sort=name \
-      --mtime='@1' \
-      --owner=0 \
-      --group=0 \
-      --numeric-owner \
-      -cf - \
-      -C "$bundle" . \
-      | gzip -n > "$tarball"
+    ${if prebuilt then prebuiltSteps else assembledSteps}
 
     sha="$(sha256sum "$tarball" | cut -d' ' -f1)"
     printf '%s  %s\n' "$sha" "${artifactName}" > "$out/SHA256SUMS"
@@ -197,8 +244,7 @@ class ${formulaClass} < Formula
 ${formulaExtraLines}
 
   def install
-    bin.install ${binInstallArgs}
-    (libexec/"lib").install Dir["libexec/lib/*"]
+${formulaInstall}
   end
 
   test do

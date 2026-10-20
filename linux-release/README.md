@@ -99,6 +99,11 @@ See `action.yaml` for the canonical list. Required: `mode`,
 `release-output`, `dev-output`, `executable-name`, `usage-grep`,
 `dev-tag`, `release-version-command`.
 
+For a product of several commands built with `mkLinuxArtifacts { commands = [ ... ]; }`,
+pass `commands: a,b,c` (one AppImage each, one DEB and RPM for all) and, when a
+command's no-argument run does more than print its usage, `smoke-args`
+(for example `--version`); both reach the smoke app and the dev-release re-smoke.
+
 ## Steps
 
 1. Validate mode, build the chosen flake output, copy artifacts
