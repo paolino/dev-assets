@@ -24,7 +24,7 @@ runs:
           substituters = https://cache.iog.io https://cache.nixos.org/ https://paolino.cachix.org
           accept-flake-config = true
 
-    - uses: cachix/cachix-action@v15
+    - uses: cachix/cachix-action@v17
       with:
         name: paolino
         authToken: ${{ inputs.cachix-auth-token }}
